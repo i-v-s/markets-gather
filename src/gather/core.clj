@@ -9,7 +9,43 @@
     [manifold.deferred :as d]
     [manifold.bus :as bus]
     [clojure.core.async :as a]
-    [clojure.data.json :as json]))
+    [clojure.data.json :as json]
+    [gather.ch :as ch]))
+
+(def trade-rec {
+  :id "Int32"
+  :time "time"
+  :buy "Uint8"
+  :price "Float64"
+  :coin "Float32"
+  :base "Float32"
+  })
+
+(defn comma-join [items]
+  "Join items with comma"
+  (clojure.string/join ", " items))
+
+(defn column-query
+  [item]
+  (let [[key desc] item]
+    (str (name key) " " desc)))
+
+(defn create-table-query
+  "Return create table query"
+  [name rec & {
+    :keys [order-by engine partition-by]
+    :or {
+      engine "MergeTree()"
+      partition-by "toYYYYMM(time)"
+    }
+    }]
+  (str
+    "CREATE TABLE IF NOT EXISTS " name "(\n"
+    (clojure.string/join ",\n" (map column-query rec))
+    "\n) ENGINE = " engine
+    " ORDER BY " (comma-join order-by)
+    (if partition-by (str " PARTITION BY " partition-by) "")
+    ))
 
 (defn exmo-topic
   "Convert pair to topic"
@@ -31,7 +67,10 @@
   (let [conn @(http/websocket-client "wss://ws-api.exmo.com:443/v1/public")]
     (print "Connected!")
     (s/put-all! conn [(exmo-query trades)])
-    (while true (print @(s/take! conn)))))
+    (take 10 (for [x (range 10)]
+      (print (str "\nChunk:\n" @(s/take! conn)))
+    ))))
+    ;(while true (print @(s/take! conn)))))
 
 ;(let [conn @(http/websocket-client "wss://ws-api.exmo.com:443/v1/public")]
 ;  (print "Connected!")
