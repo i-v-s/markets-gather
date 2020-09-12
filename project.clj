@@ -7,13 +7,17 @@
     [org.clojure/clojure "1.10.1"]
     [org.clojure/data.json "1.0.0"]
     [org.clojure/core.async "1.3.610"]
+    [org.clojure/tools.namespace "0.2.11"]
+    [org.clojure/java.jdbc "0.7.11"]
+    [seancorfield/next.jdbc "1.1.588"]
     [proto-repl "0.3.1"]
     [proto-repl-charts "0.3.1"]
-    [org.clojure/tools.namespace "0.2.11"]
     [aleph "0.4.7-alpha5"]
     [compojure "1.6.2"]
+    [com.github.housepower/clickhouse-native-jdbc "2.2-stable"]
     [com.layerware/hugsql "0.5.1"]
     [us.2da/hugsql-adapter-clickhouse-native-jdbc "1.0.1"]
+    [hikari-cp "2.13.0"]
   ]
   :main ^:skip-aot gather.core
   :target-path "target/%s"

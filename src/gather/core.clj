@@ -14,38 +14,31 @@
 
 (def trade-rec {
   :id "Int32"
-  :time "time"
-  :buy "Uint8"
+  :time "DateTime"
+  :buy "UInt8"
   :price "Float64"
   :coin "Float32"
   :base "Float32"
   })
 
-(defn comma-join [items]
-  "Join items with comma"
-  (clojure.string/join ", " items))
+(def ch-url "jdbc:clickhouse://127.0.0.1:9000")
 
-(defn column-query
-  [item]
-  (let [[key desc] item]
-    (str (name key) " " desc)))
+(defn lower
+  "Convert name to lowercase and '-' to '_'"
+  [name]
+  (clojure.string/lower-case (clojure.string/replace name "-" "_")))
 
-(defn create-table-query
-  "Return create table query"
-  [name rec & {
-    :keys [order-by engine partition-by]
-    :or {
-      engine "MergeTree()"
-      partition-by "toYYYYMM(time)"
-    }
-    }]
-  (str
-    "CREATE TABLE IF NOT EXISTS " name "(\n"
-    (clojure.string/join ",\n" (map column-query rec))
-    "\n) ENGINE = " engine
-    " ORDER BY " (comma-join order-by)
-    (if partition-by (str " PARTITION BY " partition-by) "")
-    ))
+(defn create-market-tables-queries
+  "Get queries for market tables creation"
+  [market pairs]
+  (concat
+    ["CREATE DATABASE IF NOT EXISTS fx"]
+    (map (fn [pair]
+      (ch/create-table-query
+        (str "fx." (lower market) "_" (lower pair) "_trades") trade-rec
+      :engine "ReplacingMergeTree()" :partition-by "toYYYYMM(time)" :order-by ["id"]))
+      pairs)
+  ))
 
 (defn exmo-topic
   "Convert pair to topic"
@@ -78,4 +71,19 @@
 ;  (while true (print @(s/take! conn)))
 ;)
 
-(exmo-query ["BTC-USD", "ETH-USD"])
+(defn print-vec
+  "Prints vector of strings"
+  [lines]
+  (dorun (map println lines)))
+
+(defn main
+  "Entry point"
+  [db-url]
+  (let [
+    stmt (ch/connect-st db-url)
+    create-queries (create-market-tables-queries "Exmo" ["BTC-USD", "ETH-USD"])
+    ]
+    (println "Executing create:")
+    (print-vec create-queries)
+    (ch/exec-vec! stmt create-queries)
+  ))
