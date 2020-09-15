@@ -2,7 +2,8 @@
   (:require [hugsql.core :as hugsql]
             [hikari-cp.core :refer [close-datasource make-datasource]]
             [clojure.java.jdbc :as jdbc]
-            [hugsql.adapter.clickhouse-native-jdbc :as clickhouse]))
+            [hugsql.adapter.clickhouse-native-jdbc :as clickhouse]
+            [gather.common :as c]))
 
 (import java.sql.DriverManager)
 
@@ -34,13 +35,28 @@
 
 (defn exec-vec!
   "Execute vec of queries"
-  [stmt queries]
-  (dorun (map (partial exec-query! stmt) queries)))
+  [conn queries]
+  (dorun
+    (map
+      (partial exec-query! (.createStatement conn))
+      queries)))
 
-(defn comma-join
-  "Join items with comma"
-  [items]
-  (clojure.string/join ", " items))
+(defn add-batch!
+  [p-st values]
+  (doseq [[i v] (map-indexed seq values)]
+    (case (type v)
+      java.lang.String (.setString p-st (+ i 1) v)
+      java.lang.Long (.setLong p-st (+ i 1) v)
+    ))
+  (.addBatch p-st))
+
+(defn insert-many!
+  [conn query items]
+  "Insert many rows of data"
+  (let [p-st (.prepareStatement conn query)])
+  (doseq [item items]
+    add-batch! p-st item)
+  (.executeBatch p-st))
 
 (defn column-query
   [item]
@@ -60,7 +76,7 @@
     "CREATE TABLE IF NOT EXISTS " name "("
     (clojure.string/join ", " (map column-query rec))
     ") ENGINE = " engine
-    " ORDER BY " (comma-join order-by)
+    " ORDER BY " (c/comma-join order-by)
     (if partition-by (str " PARTITION BY " partition-by) "")
     ))
 
