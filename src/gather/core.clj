@@ -59,12 +59,12 @@
 
 (defn exmo-gather
   "Gather from Exmo"
-  [ch-st trades]
+  [conn trades]
   (let [conn @(http/websocket-client "wss://ws-api.exmo.com:443/v1/public")]
     (print "Connected!")
     (s/put-all! conn [(exmo-query trades)])
     (take 10 (for [x (range 10)]
-      (print (str "\nChunk:\n" @(s/take! conn)))
+      (println (str "\nChunk:\n" @(s/take! conn)))
     ))))
     ;(while true (print @(s/take! conn)))))
 
@@ -81,23 +81,26 @@
 
 (defn create-market-tables
   "Create market tables"
-  [stmt market pairs]
+  [conn market pairs]
   (let [queries (create-market-tables-queries "Exmo" ["BTC-USD", "ETH-USD"])]
     (println "Executing create:")
     (print-vec queries)
-    (ch/exec-vec! stmt queries)
+    (ch/exec-vec! conn queries)
   ))
 
 (defn main
   "Entry point"
-  [db-url & markets]
+  [db-url markets]
   (let [
-    stmt (ch/connect-st db-url)
+    conn (ch/connect db-url)
+    stmt (.createStatement conn)
     ]
     (doseq [[market, pairs] markets]
-      (create-market-tables stmt market pairs))
-    (exmo-gather stmt (get "Exmo")
-  ))
+      (create-market-tables conn market pairs))
+    (exmo-gather conn (get markets "Exmo")
+  )))
 
 (defn start
+  "Start with params"
+  []
   (main ch-url {"Exmo" ["BTC-USD" "ETH-USD"]}))

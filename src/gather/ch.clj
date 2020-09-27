@@ -7,14 +7,6 @@
 
 (import java.sql.DriverManager)
 
-;(hugsql/def-db-fns "fns.sql")
-;(hugsql/set-adapter! (clickhouse/hugsql-adapter-clickhouse-native-jdbc))
-
-
-; (def conn (DriverManager/getConnection "jdbc:clickhouse://127.0.0.1:9000"))
-; (def stmt (.createStatement conn))
-
-
 (defn connect
   "Connect to Clickhouse"
   [url]
@@ -24,9 +16,6 @@
   "Connect to Clickhouse"
   [url]
   (.createStatement (DriverManager/getConnection url)))
-
-;  (make-datasource
-;                   {:jdbc-url url}))
 
 (defn exec-query!
   "Execute SQL query"
@@ -41,22 +30,28 @@
       (partial exec-query! (.createStatement conn))
       queries)))
 
+(defmulti set-pst-item class)
+(defmethod set-pst-item java.lang.Long [x] (fn [p-st i v] (.setLong p-st i v)))
+(defmethod set-pst-item java.lang.String [x] (fn [p-st i v] (.setString p-st i v)))
+
+(defn set-pst-item!
+  [p-st i v]
+  ((set-pst-item v) p-st i v))
+
 (defn add-batch!
+  "Add row of data to prepared statement"
   [p-st values]
-  (doseq [[i v] (map-indexed seq values)]
-    (case (type v)
-      java.lang.String (.setString p-st (+ i 1) v)
-      java.lang.Long (.setLong p-st (+ i 1) v)
-    ))
+  (doseq [[i v] (map-indexed vector values)]
+    (set-pst-item! p-st (+ i 1) v))
   (.addBatch p-st))
 
 (defn insert-many!
-  [conn query items]
   "Insert many rows of data"
-  (let [p-st (.prepareStatement conn query)])
-  (doseq [item items]
-    add-batch! p-st item)
-  (.executeBatch p-st))
+  [conn query items]
+  (let [p-st (.prepareStatement conn query)]
+    (doseq [item items]
+      (add-batch! p-st item))
+    (.executeBatch p-st)))
 
 (defn column-query
   [item]
