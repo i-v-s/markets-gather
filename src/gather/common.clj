@@ -10,3 +10,8 @@
   "Join items with comma"
   [items]
   (clojure.string/join ", " items))
+
+(defn trades-table-name
+  "Get table name for trades"
+  [market pair]
+  (str "fx." (lower market) "_" (lower pair) "_trades"))

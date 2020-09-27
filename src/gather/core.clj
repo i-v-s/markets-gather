@@ -8,21 +8,20 @@
     [manifold.stream :as s]
     [manifold.deferred :as d]
     [manifold.bus :as bus]
+    [clojure.string :as str]
     [clojure.core.async :as a]
     [clojure.data.json :as json]
     [gather.ch :as ch]
     [gather.common :as c]))
 
 (def trade-rec {
-  :id "Int32"
+  :id "Int32 CODEC(Delta, LZ4)"
   :time "DateTime"
   :buy "UInt8"
-  :price "Float64"
+  :price "Float64 CODEC(Gorilla)"
   :coin "Float32"
   :base "Float32"
   })
-
-(def ch-url "jdbc:clickhouse://127.0.0.1:9000")
 
 (defn create-market-tables-queries
   "Get queries for market tables creation"
@@ -31,10 +30,34 @@
     ["CREATE DATABASE IF NOT EXISTS fx"]
     (map (fn [pair]
       (ch/create-table-query
-        (str "fx." (c/lower market) "_" (c/lower pair) "_trades") trade-rec
+        (c/trades-table-name market pair) trade-rec
       :engine "ReplacingMergeTree()" :partition-by "toYYYYMM(time)" :order-by ["id"]))
       pairs)
   ))
+
+(defn put-trades!
+  "Put trades record into Clickhouse"
+  [conn market pair trades]
+  (ch/insert-many! conn
+    (str
+      "INSERT INTO " (c/trades-table-name market pair)
+      "(id, time, buy, price, coin, base) VALUES (?, ?, ?, ?, ?, ?)")
+    trades
+  ))
+
+(defn exmo-trade
+  "Transform Exmo trade record to Clickhouse row"
+  [r]
+  [
+    (get r "trade_id")
+    (new java.sql.Timestamp (* 1000 (get r "date")))
+    (if (= "buy" (get r "type")) 1 0)
+    (Float/parseFloat (get r "price"))
+    (Float/parseFloat (get r "quantity"))
+    (Float/parseFloat (get r "amount"))
+  ])
+
+(def ch-url "jdbc:clickhouse://127.0.0.1:9000")
 
 (defn exmo-topic
   "Convert pair to topic"
@@ -51,28 +74,22 @@
   }))
 
 
-(defn put-trades
-  "Put trades record into Clickhouse"
-  [stmt trades]
-  )
-
-
 (defn exmo-gather
   "Gather from Exmo"
   [conn trades]
-  (let [conn @(http/websocket-client "wss://ws-api.exmo.com:443/v1/public")]
-    (print "Connected!")
-    (s/put-all! conn [(exmo-query trades)])
-    (take 10 (for [x (range 10)]
-      (println (str "\nChunk:\n" @(s/take! conn)))
-    ))))
-    ;(while true (print @(s/take! conn)))))
-
-;(let [conn @(http/websocket-client "wss://ws-api.exmo.com:443/v1/public")]
-;  (print "Connected!")
-;  (s/put-all! conn ["{\"id\":1,\"method\":\"subscribe\",\"topics\":[\"spot/trades:BTC_USD\",\"spot/ticker:LTC_USD\"]}"])
-;  (while true (print @(s/take! conn)))
-;)
+  (let [ws @(http/websocket-client "wss://ws-api.exmo.com:443/v1/public")]
+    (println "Connected!")
+    (s/put-all! ws [(exmo-query trades)])
+    (while true (let [chunk (json/read-str @(s/take! ws))]
+      (if (= "update" (get chunk "event"))
+        (let [
+          ;topic "spot/trades"
+          [topic pair] (str/split (get chunk "topic") #":")
+          data (get chunk "data")
+          ]
+          (case topic
+            "spot/trades" (put-trades! conn "Exmo" pair (map exmo-trade data))))
+    )))))
 
 (defn print-vec
   "Prints vector of strings"
@@ -82,7 +99,7 @@
 (defn create-market-tables
   "Create market tables"
   [conn market pairs]
-  (let [queries (create-market-tables-queries "Exmo" ["BTC-USD", "ETH-USD"])]
+  (let [queries (create-market-tables-queries market pairs)]
     (println "Executing create:")
     (print-vec queries)
     (ch/exec-vec! conn queries)
@@ -103,4 +120,9 @@
 (defn start
   "Start with params"
   []
-  (main ch-url {"Exmo" ["BTC-USD" "ETH-USD"]}))
+  (main ch-url {
+    "Exmo" [
+      "BTC-USD" "ETH-USD" "XRP-USD" "BCH-USD" "EOS-USD" "DASH-USD" "WAVES-USD"
+      "ADA-USD" "LTC-USD" "BTG-USD" "ATOM-USD" "NEO-USD" "ETC-USD" "XMR-USD"
+      "ZEC-USD" "TRX-USD"
+    ]}))

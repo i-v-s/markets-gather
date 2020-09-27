@@ -31,8 +31,11 @@
       queries)))
 
 (defmulti set-pst-item class)
-(defmethod set-pst-item java.lang.Long [x] (fn [p-st i v] (.setLong p-st i v)))
-(defmethod set-pst-item java.lang.String [x] (fn [p-st i v] (.setString p-st i v)))
+(defmethod set-pst-item java.lang.Float    [x] (fn [p-st i v] (.setFloat p-st i v)))
+(defmethod set-pst-item java.lang.Boolean  [x] (fn [p-st i v] (.setBoolean p-st i v)))
+(defmethod set-pst-item java.lang.Long     [x] (fn [p-st i v] (.setLong p-st i v)))
+(defmethod set-pst-item java.lang.String   [x] (fn [p-st i v] (.setString p-st i v)))
+(defmethod set-pst-item java.sql.Timestamp [x] (fn [p-st i v] (.setTimestamp p-st i v)))
 
 (defn set-pst-item!
   [p-st i v]
@@ -74,11 +77,3 @@
     " ORDER BY " (c/comma-join order-by)
     (if partition-by (str " PARTITION BY " partition-by) "")
     ))
-
-
-; (import java.sql.DriverManager)
-; (def conn (DriverManager/getConnection "jdbc:clickhouse://127.0.0.1:9000"))
-; (def stmt (.createStatement conn))
-; (def rs (.executeQuery stmt "SELECT 5"))
-; (.next rs)
-; (.getInt rs 1)
