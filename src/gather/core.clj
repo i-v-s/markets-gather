@@ -3,16 +3,13 @@
     [compojure.core :as compojure :refer [GET]]
     [ring.middleware.params :as params]
     [compojure.route :as route]
-    [aleph.http :as http]
     [byte-streams :as bs]
-    [manifold.stream :as s]
     [manifold.deferred :as d]
     [manifold.bus :as bus]
-    [clojure.string :as str]
     [clojure.core.async :as a]
-    [clojure.data.json :as json]
     [gather.ch :as ch]
-    [gather.common :as c]))
+    [gather.common :as c]
+    [gather.exmo :as exmo]))
 
 (def trade-rec {
   :id "Int32 CODEC(Delta, LZ4)"
@@ -45,51 +42,7 @@
     trades
   ))
 
-(defn exmo-trade
-  "Transform Exmo trade record to Clickhouse row"
-  [r]
-  [
-    (get r "trade_id")
-    (new java.sql.Timestamp (* 1000 (get r "date")))
-    (if (= "buy" (get r "type")) 1 0)
-    (Float/parseFloat (get r "price"))
-    (Float/parseFloat (get r "quantity"))
-    (Float/parseFloat (get r "amount"))
-  ])
-
 (def ch-url "jdbc:clickhouse://127.0.0.1:9000")
-
-(defn exmo-topic
-  "Convert pair to topic"
-  [topic]
-  (fn [item] (str "spot/" topic ":" (clojure.string/replace item "-" "_"))))
-
-(defn exmo-query
-  "Prepare Exmo websocket request"
-  [trades]
-  (json/write-str {
-    :id 1
-    :method "subscribe"
-    :topics (map (exmo-topic "trades") trades)
-  }))
-
-
-(defn exmo-gather
-  "Gather from Exmo"
-  [conn trades]
-  (let [ws @(http/websocket-client "wss://ws-api.exmo.com:443/v1/public")]
-    (println "Connected!")
-    (s/put-all! ws [(exmo-query trades)])
-    (while true (let [chunk (json/read-str @(s/take! ws))]
-      (if (= "update" (get chunk "event"))
-        (let [
-          ;topic "spot/trades"
-          [topic pair] (str/split (get chunk "topic") #":")
-          data (get chunk "data")
-          ]
-          (case topic
-            "spot/trades" (put-trades! conn "Exmo" pair (map exmo-trade data))))
-    )))))
 
 (defn print-vec
   "Prints vector of strings"
@@ -114,12 +67,12 @@
     ]
     (doseq [[market, pairs] markets]
       (create-market-tables conn market pairs))
-    (exmo-gather conn (get markets "Exmo")
+    (exmo/gather conn (get markets "Exmo") put-trades!
   )))
 
-(defn start
+(defn -main
   "Start with params"
-  []
+  [arg]
   (main ch-url {
     "Exmo" [
       "BTC-USD" "ETH-USD" "XRP-USD" "BCH-USD" "EOS-USD" "DASH-USD" "WAVES-USD"
