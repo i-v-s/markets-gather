@@ -32,6 +32,7 @@
 
 (defmulti set-pst-item class)
 (defmethod set-pst-item java.lang.Float    [x] (fn [p-st i v] (.setFloat p-st i v)))
+(defmethod set-pst-item java.lang.Double   [x] (fn [p-st i v] (.setDouble p-st i v)))
 (defmethod set-pst-item java.lang.Boolean  [x] (fn [p-st i v] (.setBoolean p-st i v)))
 (defmethod set-pst-item java.lang.Long     [x] (fn [p-st i v] (.setLong p-st i v)))
 (defmethod set-pst-item java.lang.String   [x] (fn [p-st i v] (.setString p-st i v)))
