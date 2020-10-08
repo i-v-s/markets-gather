@@ -9,7 +9,8 @@
     [clojure.core.async :as a]
     [gather.ch :as ch]
     [gather.common :as c]
-    [gather.exmo :as exmo]))
+    [gather.exmo :as exmo]
+    [gather.binance :as binance]))
 
 (def trade-rec {
   :id "Int32 CODEC(Delta, LZ4)"
@@ -53,8 +54,8 @@
   "Create market tables"
   [conn market pairs]
   (let [queries (create-market-tables-queries market pairs)]
-    (println "Executing create:")
-    (print-vec queries)
+    ;(println "Executing create:")
+    ;(print-vec queries)
     (ch/exec-vec! conn queries)
   ))
 
@@ -67,15 +68,18 @@
     ]
     (doseq [[market, pairs] markets]
       (create-market-tables conn market pairs))
-    (exmo/gather conn (get markets "Exmo") put-trades!
-  )))
+    ;(exmo/gather conn (get markets "Exmo") put-trades!)
+    (binance/gather conn (get markets "Binance") put-trades!)
+  ))
 
 (defn -main
   "Start with params"
   [arg]
   (main ch-url {
+    "Binance" [
+      "BTC-USDT" "ETH-USDT"]
     "Exmo" [
       "BTC-USD" "ETH-USD" "XRP-USD" "BCH-USD" "EOS-USD" "DASH-USD" "WAVES-USD"
       "ADA-USD" "LTC-USD" "BTG-USD" "ATOM-USD" "NEO-USD" "ETC-USD" "XMR-USD"
-      "ZEC-USD" "TRX-USD"
-    ]}))
+      "ZEC-USD" "TRX-USD"]
+    }))
