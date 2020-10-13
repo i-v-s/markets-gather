@@ -36,7 +36,7 @@
   "Gather from Exmo"
   [conn trades put-trades!]
   (let [ws @(http/websocket-client "wss://ws-api.exmo.com:443/v1/public")]
-    (println "Connected!")
+    (println "Connected to Exmo")
     (s/put-all! ws [(ws-query trades)])
     (while true (let [chunk (json/read-str @(s/take! ws))]
       (if (= "update" (get chunk "event"))

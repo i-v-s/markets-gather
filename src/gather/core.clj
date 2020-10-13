@@ -36,6 +36,7 @@
 (defn put-trades!
   "Put trades record into Clickhouse"
   [conn market pair trades]
+  (print (get market 0))(flush)
   (ch/insert-many! conn
     (str
       "INSERT INTO " (c/trades-table-name market pair)
@@ -64,12 +65,12 @@
   [db-url markets]
   (let [
     conn (ch/connect db-url)
-    stmt (.createStatement conn)
     ]
     (doseq [[market, pairs] markets]
       (create-market-tables conn market pairs))
-    ;(exmo/gather conn (get markets "Exmo") put-trades!)
-    (binance/gather conn (get markets "Binance") put-trades!)
+    (a/thread (exmo/gather (ch/connect db-url) (get markets "Exmo") put-trades!))
+    (a/thread (binance/gather (ch/connect db-url) (get markets "Binance") put-trades!))
+    (loop [] (Thread/sleep 5000) (recur))
   ))
 
 (defn -main
@@ -77,7 +78,7 @@
   [arg]
   (main ch-url {
     "Binance" [
-      "BTC-USDT" "ETH-USDT"]
+      "BTC-USDT" "ETH-USDT" "BNB-USDT" "DOT-USDT"]
     "Exmo" [
       "BTC-USD" "ETH-USD" "XRP-USD" "BCH-USD" "EOS-USD" "DASH-USD" "WAVES-USD"
       "ADA-USD" "LTC-USD" "BTG-USD" "ATOM-USD" "NEO-USD" "ETC-USD" "XMR-USD"

@@ -64,5 +64,5 @@
       ]
       (if action
         (action (get chunk "data"))
-        (println "No action for: " chunk))
+        (println "\nBinance: No action for: " chunk))
     ))))
