@@ -9,6 +9,7 @@
     [org.clojure/core.async "1.3.610"]
     [org.clojure/tools.namespace "0.2.11"]
     [org.clojure/java.jdbc "0.7.11"]
+    [org.clojure/data.csv "1.0.0"]
     [seancorfield/next.jdbc "1.1.588"]
     [proto-repl "0.3.1"]
     [proto-repl-charts "0.3.1"]
