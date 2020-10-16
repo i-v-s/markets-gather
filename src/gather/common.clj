@@ -25,7 +25,8 @@
     (try
        (func)
        (catch Exception e (println "\n" title " exception: " (.getMessage e))))
-    (Thread/sleep 1000)))
+    (Thread/sleep 1000)
+    (recur)))
 
 (defn forever-loop
   "Execute function in loop"

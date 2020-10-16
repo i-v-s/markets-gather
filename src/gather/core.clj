@@ -73,10 +73,9 @@
     ]
     (doseq [[market pairs] markets]
       (create-market-tables conn market pairs))
-    (doseq [[name gath] gather-map]
-;      (print name gath))
-      (c/forever-loop name
-        (fn [] (gath (ch/connect db-url) (get markets name) put-trades!))))
+    (doseq [[market pairs] markets]
+      (c/forever-loop market
+        (fn [] ((get gather-map market) (ch/connect db-url) pairs put-trades!))))
     (loop [] (Thread/sleep 5000) (recur))))
 
 (defn -main
