@@ -60,18 +60,24 @@
     (ch/exec-vec! conn queries)
   ))
 
+(def gather-map {
+  "Exmo" exmo/gather
+  "Binance" binance/gather
+  })
+
 (defn main
   "Entry point"
   [db-url markets]
   (let [
     conn (ch/connect db-url)
     ]
-    (doseq [[market, pairs] markets]
+    (doseq [[market pairs] markets]
       (create-market-tables conn market pairs))
-    (a/thread (exmo/gather (ch/connect db-url) (get markets "Exmo") put-trades!))
-    (a/thread (binance/gather (ch/connect db-url) (get markets "Binance") put-trades!))
-    (loop [] (Thread/sleep 5000) (recur))
-  ))
+    (doseq [[name gath] gather-map]
+;      (print name gath))
+      (c/forever-loop name
+        (fn [] (gath (ch/connect db-url) (get markets name) put-trades!))))
+    (loop [] (Thread/sleep 5000) (recur))))
 
 (defn -main
   "Start with params"

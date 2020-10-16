@@ -1,5 +1,7 @@
 (ns gather.common
-  )
+  (:require
+    [clojure.core.async :as a]
+  ))
 
 (defn lower
   "Convert name to lowercase and '-' to '_'"
@@ -15,3 +17,17 @@
   "Get table name for trades"
   [market pair]
   (str "fx." (lower market) "_" (lower pair) "_trades"))
+
+(defn try-loop
+  "Try to call function in loop"
+  [title func]
+  (loop []
+    (try
+       (func)
+       (catch Exception e (println "\n" title " exception: " (.getMessage e))))
+    (Thread/sleep 1000)))
+
+(defn forever-loop
+  "Execute function in loop"
+  [title func]
+  (a/thread (try-loop title func)))
