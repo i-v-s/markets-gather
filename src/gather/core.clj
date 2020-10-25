@@ -23,7 +23,7 @@
   })
 
 (def depth-rec {
-  :id "Int32 CODEC(Delta, LZ4)"
+  :id "Int64 CODEC(Delta, LZ4)"
   :time "DateTime"
   :price "Float64 CODEC(Gorilla)"
   :base "Float32"
@@ -63,6 +63,21 @@
     trades
   ))
 
+(defn put-depth-query
+  [market pair buy?]
+  (str
+    "INSERT INTO " (c/depths-table-name market pair buy?)
+    "(id, time, price, base) VALUES (?, ?, ?, ?)"))
+
+(defn put-depth!
+  "Put depth records into Clickhouse"
+  [conn market pair [buy sell]]
+  ;(print (get market 0)) (flush)
+  (println market pair "buy" (count buy) "sell" (count sell))
+  (ch/insert-many! conn (put-depth-query market pair true) buy)
+  (ch/insert-many! conn (put-depth-query market pair false) sell)
+  )
+
 (def ch-url "jdbc:clickhouse://127.0.0.1:9000")
 
 (defn print-vec
@@ -92,7 +107,7 @@
       (create-market-tables conn market pairs))
     (doseq [[market pairs] markets]
       (c/forever-loop market
-        (fn [] ((get gather-map market) (ch/connect db-url) pairs put-trades!))))
+        (fn [] ((get gather-map market) (ch/connect db-url) pairs put-trades! put-depth!))))
     (loop [] (Thread/sleep 5000) (recur))))
 
 (defn -main

@@ -1,11 +1,13 @@
 (ns gather.binance
   (:require
     [clojure.string :as str]
-    [manifold.stream :as s]
+    [clojure.walk :as w]
     [clojure.data.json :as json]
+    [manifold.stream :as s]
     [aleph.http :as http]
     [byte-streams :as bs]
     [manifold.deferred :as d]
+    [gather.common :as c]
   ))
 
 (defn de-hyphen
@@ -85,6 +87,16 @@
     (Float/parseFloat (get r "quoteQty"))
   ])
 
+(defn transform-depth-level
+  "Transform Binance depth record to Clickhouse row"
+  [time id]
+  (fn [[p q]] (let [price (Double/parseDouble p)] [
+    id
+    time
+    price
+    (-> q Float/parseFloat (* price) float)
+    ])))
+
 (defn trades-put-map
   "Make callback map for trades streams"
   [conn put-trades! pairs]
@@ -106,13 +118,31 @@
       (put! pair)
       )))
 
+(defn transform-depths-rest [d]
+  (let [
+      id (:lastUpdateId d)
+      t (transform-depth-level (c/now) id)
+    ]
+    (for [k [:bids :asks]] (->> d k (mapv t)))
+    ))
+
 (defn put-current-depths!
   "Get depth from REST and put them by callback"
-  [pairs put!])
+  [conn pairs put!]
+  (doseq [pair pairs]
+    (->> @(http/get (depth-rest-query pair))
+      :body
+      bs/to-string
+      json/read-str
+      w/keywordize-keys
+      transform-depths-rest
+      ;(println "DEPTH:")
+      (put! conn "Binance" pair)
+      )))
 
 (defn gather
   "Gather from Binance"
-  [conn pairs put-trades!]
+  [conn pairs put-trades! put-depth!]
   (let [
       ws @(http/websocket-client (str
         "wss://stream.binance.com:9443/stream?streams="
@@ -125,6 +155,7 @@
     (println "Connected to Binance.")
     (s/put-all! ws [(ws-query pairs pairs)])
     (put-recent-trades! pairs (fn [p r] (put-trades! conn "Binance" p r)))
+    (put-current-depths! conn pairs put-depth!)
     (while true (let [
         chunk (json/read-str @(s/take! ws))
         action (get actions (get chunk "stream"))

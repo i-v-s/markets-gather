@@ -37,3 +37,8 @@
   "Execute function in loop"
   [title func]
   (a/thread (try-loop title func)))
+
+(defn now
+  "Return current time"
+  []
+  (new java.sql.Timestamp (System/currentTimeMillis)))

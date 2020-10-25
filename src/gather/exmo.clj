@@ -34,7 +34,7 @@
 
 (defn gather
   "Gather from Exmo"
-  [conn trades put-trades!]
+  [conn trades put-trades! put-depth!]
   (let [ws @(http/websocket-client "wss://ws-api.exmo.com:443/v1/public")]
     (println "Connected to Exmo")
     (s/put-all! ws [(ws-query trades)])
