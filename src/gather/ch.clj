@@ -22,6 +22,35 @@
   [stmt query]
   (.executeQuery stmt query))
 
+(defn get-metadata
+  [result-set]
+  (let [md (.getMetaData result-set)]
+    (->> md .getColumnCount inc (range 1) (map (fn [i] [
+      (->> i (.getColumnLabel md) keyword)
+      (.getColumnTypeName md i)
+    ]))
+    ;(into {})
+    )))
+
+(defn fetch-row
+  [result-set metadata]
+  (->> metadata (map-indexed (fn [i [k t]]
+    (let [j (inc i)] {k (case t
+      "UInt8" (.getLong result-set j)
+      "String" (.getString result-set j)
+      )}))) (into {})))
+
+(defn fetch-all
+  "Fetch all rows from result-set"
+  [result-set]
+  (let [md (get-metadata result-set)]
+    (for [i (range) :while (.next result-set)] (fetch-row result-set md))))
+
+(defn fetch-tables
+  [st]
+  (exec-query! st "USE fx")
+  (->> "SHOW TABLES" (exec-query! st) fetch-all (map :name)))
+
 (defn exec-vec!
   "Execute vec of queries"
   [conn queries]
