@@ -25,18 +25,22 @@
 
 (defn trade-stream
   "Convert pair to trade topic name"
-  [item]
-  (str
-    (lower-pair item)
-    "@trade"))
+  [item] (str (lower-pair item) "@trade"))
+
+(defn depth-stream
+  "Convert pair to depth topic name"
+  [item] (str (lower-pair item) "@depth"))
 
 (defn ws-query
   "Prepare websocket request"
-  [trades]
+  [trades depths]
   (json/write-str {
     :id 1
     :method "SUBSCRIBE"
-    :params (map trade-stream trades)
+    :params (concat
+      (map trade-stream trades)
+      (map depth-stream depths)
+    )
   }))
 
 (defn trades-rest-query
@@ -44,6 +48,14 @@
   [pair]
   (str
     "https://www.binance.com/api/v3/trades?symbol="
+    (upper-pair pair)
+    "&limit=1000"))
+
+(defn depth-rest-query
+  "Prepare REST url for depth"
+  [pair]
+  (str
+    "https://www.binance.com/api/v3/depth?symbol="
     (upper-pair pair)
     "&limit=1000"))
 
@@ -64,8 +76,7 @@
 
 (defn transform-trade
   "Transform Binance trade record from REST to Clickhouse row"
-  [r]
-  [
+  [r] [
     (get r "id")
     (new java.sql.Timestamp (get r "time"))
     (if (get r "isBuyerMaker") 0 1)
@@ -81,11 +92,10 @@
     (trade-stream pair)
     (fn [data]
       (put-trades! conn "Binance" pair [(transform-trade-ws data)]))
-  ]) pairs))
-  )
+  ]) pairs)))
 
-(defn recent-trades
-  "Get recent trades"
+(defn put-recent-trades!
+  "Get recent trades from REST and put them by callback"
   [pairs put!]
   (doseq [pair pairs]
     (->> @(http/get (trades-rest-query pair))
@@ -96,18 +106,25 @@
       (put! pair)
       )))
 
+(defn put-current-depths!
+  "Get depth from REST and put them by callback"
+  [pairs put!])
+
 (defn gather
   "Gather from Binance"
-  [conn trades put-trades!]
+  [conn pairs put-trades!]
   (let [
       ws @(http/websocket-client (str
         "wss://stream.binance.com:9443/stream?streams="
-        (clojure.string/join "/" (map trade-stream trades))))
-      actions (trades-put-map conn put-trades! trades)
+        (clojure.string/join "/" (concat
+          (map trade-stream pairs)
+          (map depth-stream pairs)
+        ))))
+      actions (trades-put-map conn put-trades! pairs)
     ]
     (println "Connected to Binance.")
-    (s/put-all! ws [(ws-query trades)])
-    (recent-trades trades (fn [p r] (put-trades! conn "Binance" p r)))
+    (s/put-all! ws [(ws-query pairs pairs)])
+    (put-recent-trades! pairs (fn [p r] (put-trades! conn "Binance" p r)))
     (while true (let [
         chunk (json/read-str @(s/take! ws))
         action (get actions (get chunk "stream"))

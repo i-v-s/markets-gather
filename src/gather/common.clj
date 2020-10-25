@@ -18,6 +18,11 @@
   [market pair]
   (str "fx." (lower market) "_" (lower pair) "_trades"))
 
+(defn depths-table-name
+  "Get table name for depths"
+  [market pair buy]
+  (str "fx." (lower market) "_" (lower pair) "_" (if buy "buy" "sell")))
+
 (defn try-loop
   "Try to call function in loop"
   [title func]

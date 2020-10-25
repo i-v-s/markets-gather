@@ -8,6 +8,7 @@
     [manifold.bus :as bus]
     [clojure.core.async :as a]
     [gather.ch :as ch]
+    [gather.drop :as drop]
     [gather.common :as c]
     [gather.exmo :as exmo]
     [gather.binance :as binance]))
@@ -21,6 +22,13 @@
   :base "Float32"
   })
 
+(def depth-rec {
+  :id "Int32 CODEC(Delta, LZ4)"
+  :time "DateTime"
+  :price "Float64 CODEC(Gorilla)"
+  :base "Float32"
+  })
+
 (defn create-market-tables-queries
   "Get queries for market tables creation"
   [market pairs]
@@ -31,12 +39,22 @@
         (c/trades-table-name market pair) trade-rec
       :engine "ReplacingMergeTree()" :partition-by "toYYYYMM(time)" :order-by ["id"]))
       pairs)
+    (map (fn [pair]
+      (ch/create-table-query
+        (c/depths-table-name market pair true) depth-rec
+      :engine "ReplacingMergeTree()" :partition-by "toYYYYMM(time)" :order-by ["id" "price"]))
+      pairs)
+    (map (fn [pair]
+      (ch/create-table-query
+        (c/depths-table-name market pair false) depth-rec
+      :engine "ReplacingMergeTree()" :partition-by "toYYYYMM(time)" :order-by ["id" "price"]))
+      pairs)
   ))
 
 (defn put-trades!
   "Put trades record into Clickhouse"
   [conn market pair trades]
-  (print (get market 0))(flush)
+  (print (get market 0)) (flush)
   ;(println market pair "trades" (count trades))
   (ch/insert-many! conn
     (str
@@ -79,12 +97,15 @@
 
 (defn -main
   "Start with params"
-  [arg]
-  (main ch-url {
-    "Binance" [
-      "BTC-USDT" "ETH-USDT" "BNB-USDT" "DOT-USDT"]
-    "Exmo" [
-      "BTC-USD" "ETH-USD" "XRP-USD" "BCH-USD" "EOS-USD" "DASH-USD" "WAVES-USD"
-      "ADA-USD" "LTC-USD" "BTG-USD" "ATOM-USD" "NEO-USD" "ETC-USD" "XMR-USD"
-      "ZEC-USD" "TRX-USD"]
-    }))
+  [module & args]
+  (case module
+    "gather" (main ch-url {
+      "Binance" [
+        "BTC-USDT" "ETH-USDT" "BNB-USDT" "DOT-USDT"]
+      "Exmo" [
+        "BTC-USD" "ETH-USD" "XRP-USD" "BCH-USD" "EOS-USD" "DASH-USD" "WAVES-USD"
+        "ADA-USD" "LTC-USD" "BTG-USD" "ATOM-USD" "NEO-USD" "ETC-USD" "XMR-USD"
+        "ZEC-USD" "TRX-USD"]
+      })
+    "gather.drop" (drop/-main ch-url args)
+  ))

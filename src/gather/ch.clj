@@ -75,6 +75,6 @@
     "CREATE TABLE IF NOT EXISTS " name "("
     (clojure.string/join ", " (map column-query rec))
     ") ENGINE = " engine
-    " ORDER BY " (c/comma-join order-by)
+    " ORDER BY (" (c/comma-join order-by) ")"
     (if partition-by (str " PARTITION BY " partition-by) "")
     ))
