@@ -37,6 +37,7 @@
   "Put trades record into Clickhouse"
   [conn market pair trades]
   (print (get market 0))(flush)
+  ;(println market pair "trades" (count trades))
   (ch/insert-many! conn
     (str
       "INSERT INTO " (c/trades-table-name market pair)
@@ -55,8 +56,6 @@
   "Create market tables"
   [conn market pairs]
   (let [queries (create-market-tables-queries market pairs)]
-    ;(println "Executing create:")
-    ;(print-vec queries)
     (ch/exec-vec! conn queries)
   ))
 
