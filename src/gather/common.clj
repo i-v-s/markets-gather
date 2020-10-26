@@ -13,15 +13,16 @@
   [items]
   (clojure.string/join ", " items))
 
-(defn trades-table-name
-  "Get table name for trades"
-  [market pair]
-  (str "fx." (lower market) "_" (lower pair) "_trades"))
+(def table-types {
+  :t "trades"
+  :b "buy"
+  :s "sell"
+  })
 
-(defn depths-table-name
-  "Get table name for depths"
-  [market pair buy]
-  (str "fx." (lower market) "_" (lower pair) "_" (if buy "buy" "sell")))
+(defn get-table-name
+  "Get table name for trades or depths"
+  [market pair type]
+  (str "fx." (lower market) "_" (lower pair) "_" (type table-types)))
 
 (defn try-loop
   "Try to call function in loop"

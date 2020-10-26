@@ -86,10 +86,9 @@
       (add-batch! p-st item))
     (.executeBatch p-st)))
 
-(defn column-query
-  [item]
-  (let [[key desc] item]
-    (str (name key) " " desc)))
+(defn column-desc-query
+  [[key desc]]
+  (str (name key) " " desc))
 
 (defn create-table-query
   "Return create table query"
@@ -101,9 +100,18 @@
     }
     }]
   (str
-    "CREATE TABLE IF NOT EXISTS " name "("
-    (clojure.string/join ", " (map column-query rec))
+    "CREATE TABLE IF NOT EXISTS " name " ("
+    (c/comma-join (map column-desc-query rec))
     ") ENGINE = " engine
     " ORDER BY (" (c/comma-join order-by) ")"
     (if partition-by (str " PARTITION BY " partition-by) "")
     ))
+
+(defn insert-query
+  [table rec]
+  (str
+    "INSERT INTO " table " ("
+    (c/comma-join (for [[key desc] rec] (name key)))
+    ") VALUES ("
+    (c/comma-join (for [a rec] "?"))
+    ")"))

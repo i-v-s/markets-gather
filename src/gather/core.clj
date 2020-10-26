@@ -13,70 +13,54 @@
     [gather.exmo :as exmo]
     [gather.binance :as binance]))
 
-(def trade-rec {
-  :id "Int32 CODEC(Delta, LZ4)"
-  :time "DateTime"
-  :buy "UInt8"
-  :price "Float64 CODEC(Gorilla)"
-  :coin "Float32"
-  :base "Float32"
-  })
+(def trade-rec [{
+    :id "Int32 CODEC(Delta, LZ4)"
+    :time "DateTime"
+    :buy "UInt8"
+    :price "Float64 CODEC(Gorilla)"
+    :coin "Float32"
+    :base "Float32"
+  }
+  :engine "ReplacingMergeTree()"
+  :partition-by "toYYYYMM(time)"
+  :order-by ["id"]
+  ])
 
-(def depth-rec {
-  :id "Int64 CODEC(Delta, LZ4)"
-  :time "DateTime"
-  :price "Float64 CODEC(Gorilla)"
-  :base "Float32"
-  })
+(def depth-rec [{
+    :id "Int64 CODEC(Delta, LZ4)"
+    :time "DateTime"
+    :price "Float64 CODEC(Gorilla)"
+    :base "Float32"
+  }
+  :engine "ReplacingMergeTree()"
+  :partition-by "toYYYYMM(time)"
+  :order-by ["id" "price"]
+  ])
+
+(def table-types {
+  :t trade-rec
+  :b depth-rec
+  :s depth-rec})
 
 (defn create-market-tables-queries
   "Get queries for market tables creation"
   [market pairs]
-  (concat
-    ["CREATE DATABASE IF NOT EXISTS fx"]
-    (map (fn [pair]
-      (ch/create-table-query
-        (c/trades-table-name market pair) trade-rec
-      :engine "ReplacingMergeTree()" :partition-by "toYYYYMM(time)" :order-by ["id"]))
-      pairs)
-    (map (fn [pair]
-      (ch/create-table-query
-        (c/depths-table-name market pair true) depth-rec
-      :engine "ReplacingMergeTree()" :partition-by "toYYYYMM(time)" :order-by ["id" "price"]))
-      pairs)
-    (map (fn [pair]
-      (ch/create-table-query
-        (c/depths-table-name market pair false) depth-rec
-      :engine "ReplacingMergeTree()" :partition-by "toYYYYMM(time)" :order-by ["id" "price"]))
-      pairs)
-  ))
+  (concat ["CREATE DATABASE IF NOT EXISTS fx"]
+    (for [pair pairs [type rec] table-types]
+      (apply ch/create-table-query (c/get-table-name market pair type) rec))))
 
-(defn put-trades!
-  "Put trades record into Clickhouse"
-  [conn market pair trades]
-  (print (get market 0)) (flush)
-  ;(println market pair "trades" (count trades))
-  (ch/insert-many! conn
-    (str
-      "INSERT INTO " (c/trades-table-name market pair)
-      "(id, time, buy, price, coin, base) VALUES (?, ?, ?, ?, ?, ?)")
-    trades
-  ))
+(defn market-insert-query
+  [market pair type]
+  (ch/insert-query
+    (c/get-table-name market pair type)
+    (first (type table-types))))
 
-(defn put-depth-query
-  [market pair buy?]
-  (str
-    "INSERT INTO " (c/depths-table-name market pair buy?)
-    "(id, time, price, base) VALUES (?, ?, ?, ?)"))
-
-(defn put-depth!
-  "Put depth records into Clickhouse"
-  [conn market pair [buy sell]]
-  ;(print (get market 0)) (flush)
-  (println market pair "buy" (count buy) "sell" (count sell))
-  (ch/insert-many! conn (put-depth-query market pair true) buy)
-  (ch/insert-many! conn (put-depth-query market pair false) sell)
-  )
+(defn market-inserter
+  "Return function, that inserts rows to Clickhouse"
+  [conn market]
+  (fn [pair & args]
+    (for [[type rows] (apply hash-map args)]
+      (ch/insert-many! conn (market-insert-query market pair type) rows))))
 
 (def ch-url "jdbc:clickhouse://127.0.0.1:9000")
 
@@ -107,20 +91,25 @@
       (create-market-tables conn market pairs))
     (doseq [[market pairs] markets]
       (c/forever-loop market
-        (fn [] ((get gather-map market) (ch/connect db-url) pairs put-trades! put-depth!))))
+        (fn []
+          ((get gather-map market)
+          pairs
+          (market-inserter (ch/connect db-url) market)))))
     (loop [] (Thread/sleep 5000) (recur))))
+
+(def pairs-list {
+  "Binance" [
+    "BTC-USDT" "ETH-USDT" "BNB-USDT" "DOT-USDT"]
+  "Exmo" [
+    "BTC-USD" "ETH-USD" "XRP-USD" "BCH-USD" "EOS-USD" "DASH-USD" "WAVES-USD"
+    "ADA-USD" "LTC-USD" "BTG-USD" "ATOM-USD" "NEO-USD" "ETC-USD" "XMR-USD"
+    "ZEC-USD" "TRX-USD"]
+  })
 
 (defn -main
   "Start with params"
   [module & args]
   (case module
-    "gather" (main ch-url {
-      "Binance" [
-        "BTC-USDT" "ETH-USDT" "BNB-USDT" "DOT-USDT"]
-      "Exmo" [
-        "BTC-USD" "ETH-USD" "XRP-USD" "BCH-USD" "EOS-USD" "DASH-USD" "WAVES-USD"
-        "ADA-USD" "LTC-USD" "BTG-USD" "ATOM-USD" "NEO-USD" "ETC-USD" "XMR-USD"
-        "ZEC-USD" "TRX-USD"]
-      })
+    "gather" (main ch-url pairs-list)
     "gather.drop" (drop/-main ch-url args)
   ))

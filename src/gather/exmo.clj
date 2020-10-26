@@ -34,7 +34,7 @@
 
 (defn gather
   "Gather from Exmo"
-  [conn trades put-trades! put-depth!]
+  [trades put!]
   (let [ws @(http/websocket-client "wss://ws-api.exmo.com:443/v1/public")]
     (println "Connected to Exmo")
     (s/put-all! ws [(ws-query trades)])
@@ -46,5 +46,5 @@
           data (get chunk "data")
           ]
           (case topic
-            "spot/trades" (put-trades! conn "Exmo" pair (map transform-trade data))))
+            "spot/trades" (put! pair :t (map transform-trade data))))
     )))))

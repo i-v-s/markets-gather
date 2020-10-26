@@ -97,14 +97,22 @@
     (-> q Float/parseFloat (* price) float)
     ])))
 
-(defn trades-put-map
-  "Make callback map for trades streams"
-  [conn put-trades! pairs]
-  (into {} (map (fn [pair] [
+(defn transform-depth-ws
+  "Transform Binance depth records from websocket to Clickhouse rows"
+  [{time "E" u1 "U" u2 "u" buy "b" sell "a"}] {
+    :b ()
+    :s ()
+  })
+
+(defn put-map
+  "Make callback map for streams"
+  [pairs put!]
+  (apply hash-map (concat (for [pair pairs] [
     (trade-stream pair)
-    (fn [data]
-      (put-trades! conn "Binance" pair [(transform-trade-ws data)]))
-  ]) pairs)))
+    (fn [data] (put! pair :t [(transform-trade-ws data)]))
+    (depth-stream pair)
+    (fn [data] (apply put! pair (transform-depth-ws data)))
+  ]))))
 
 (defn put-recent-trades!
   "Get recent trades from REST and put them by callback"
@@ -115,16 +123,12 @@
       bs/to-string
       json/read-str
       (map transform-trade)
-      (put! pair)
+      (put! pair :t)
       )))
 
 (defn transform-depths-rest [d]
-  (let [
-      id (:lastUpdateId d)
-      t (transform-depth-level (c/now) id)
-    ]
-    (for [k [:bids :asks]] (->> d k (mapv t)))
-    ))
+  (let [t (transform-depth-level (c/now) (:lastUpdateId d))]
+    (concat (for [[k t] [[:bids :b] [:asks :s]] [t (->> d k (map t))]))))
 
 (defn put-current-depths!
   "Get depth from REST and put them by callback"
@@ -137,12 +141,12 @@
       w/keywordize-keys
       transform-depths-rest
       ;(println "DEPTH:")
-      (put! conn "Binance" pair)
+      (apply put! pair)
       )))
 
 (defn gather
   "Gather from Binance"
-  [conn pairs put-trades! put-depth!]
+  [pairs put!]
   (let [
       ws @(http/websocket-client (str
         "wss://stream.binance.com:9443/stream?streams="
@@ -150,11 +154,11 @@
           (map trade-stream pairs)
           (map depth-stream pairs)
         ))))
-      actions (trades-put-map conn put-trades! pairs)
+      actions (trades-put-map pairs put!)
     ]
     (println "Connected to Binance.")
     (s/put-all! ws [(ws-query pairs pairs)])
-    (put-recent-trades! pairs (fn [p r] (put-trades! conn "Binance" p r)))
+    (put-recent-trades! pairs put!)
     (put-current-depths! conn pairs put-depth!)
     (while true (let [
         chunk (json/read-str @(s/take! ws))
