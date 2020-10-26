@@ -27,14 +27,13 @@
   ])
 
 (def depth-rec [{
-    :id "Int64 CODEC(Delta, LZ4)"
     :time "DateTime"
     :price "Float64 CODEC(Gorilla)"
     :base "Float32"
   }
   :engine "ReplacingMergeTree()"
   :partition-by "toYYYYMM(time)"
-  :order-by ["id" "price"]
+  :order-by ["time" "price"]
   ])
 
 (def table-types {
@@ -59,8 +58,15 @@
   "Return function, that inserts rows to Clickhouse"
   [conn market]
   (fn [pair & args]
-    (for [[type rows] (apply hash-map args)]
-      (ch/insert-many! conn (market-insert-query market pair type) rows))))
+    (let [data (apply hash-map args)]
+      (print (first market)) (flush)
+      ;(println "PUT!" pair "data:" data)
+      (doseq [[tp rows] data]
+        ;(println "tp is" tp)
+        (assert (keyword? tp))
+        ;(println market pair (count rows) tp)
+        (ch/insert-many! conn (market-insert-query market pair tp) rows)
+        ))))
 
 (def ch-url "jdbc:clickhouse://127.0.0.1:9000")
 

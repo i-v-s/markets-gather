@@ -30,7 +30,9 @@
   (loop []
     (try
        (func)
-       (catch Exception e (println "\n" title " exception: " (.getMessage e))))
+       (catch Exception e
+         (println "\n" title "exception:")
+         (clojure.stacktrace/print-stack-trace e)))
     (Thread/sleep 1000)
     (recur)))
 

@@ -23,26 +23,22 @@
 (defn upper-pair
   "Convert pair to lower name"
   [item]
-  (-> item de-hyphen  clojure.string/upper-case))
+  (-> item de-hyphen clojure.string/upper-case))
 
-(defn trade-stream
-  "Convert pair to trade topic name"
-  [item] (str (lower-pair item) "@trade"))
+(def stream-types {:t "@trade" :d "@depth"})
 
-(defn depth-stream
-  "Convert pair to depth topic name"
-  [item] (str (lower-pair item) "@depth"))
+(defn get-stream
+  "Convert pair to stream topic name"
+  [type pair] (str (lower-pair pair) (type stream-types)))
 
 (defn ws-query
   "Prepare websocket request"
-  [trades depths]
+  [& streams]
   (json/write-str {
     :id 1
     :method "SUBSCRIBE"
-    :params (concat
-      (map trade-stream trades)
-      (map depth-stream depths)
-    )
+    :params (apply concat (for [[type pairs] (apply hash-map streams)]
+      (map (partial get-stream type) pairs)))
   }))
 
 (defn trades-rest-query
@@ -67,14 +63,14 @@
   (let [
       p (Double/parseDouble (get r "p"))
       q (Float/parseFloat (get r "q"))
-    ][
+    ][:t [[
       (get r "t")
       (new java.sql.Timestamp (get r "T"))
       (if (get r "m") 0 1)
       p
       q
       (float (* p q))
-    ]))
+    ]]]))
 
 (defn transform-trade
   "Transform Binance trade record from REST to Clickhouse row"
@@ -89,30 +85,32 @@
 
 (defn transform-depth-level
   "Transform Binance depth record to Clickhouse row"
-  [time id]
-  (fn [[p q]] (let [price (Double/parseDouble p)] [
-    id
-    time
-    price
-    (-> q Float/parseFloat (* price) float)
-    ])))
+  [time]
+  (let [ts (new java.sql.Timestamp time)]
+    (fn [[p q]] (let [price (Double/parseDouble p)] [
+      ts
+      price
+      (-> q Float/parseFloat (* price) float)
+      ]))))
 
 (defn transform-depth-ws
   "Transform Binance depth records from websocket to Clickhouse rows"
-  [{time "E" u1 "U" u2 "u" buy "b" sell "a"}] {
-    :b ()
-    :s ()
+  [{time "E" buy "b" sell "a"}]
+    (apply concat (for [[k vs] {:b buy :s sell}]
+      [k (map (transform-depth-level time) vs)])))
+
+(def transforms-ws {
+  :t transform-trade-ws
+  :d transform-depth-ws
   })
 
 (defn put-map
   "Make callback map for streams"
   [pairs put!]
-  (apply hash-map (concat (for [pair pairs] [
-    (trade-stream pair)
-    (fn [data] (put! pair :t [(transform-trade-ws data)]))
-    (depth-stream pair)
-    (fn [data] (apply put! pair (transform-depth-ws data)))
-  ]))))
+  (->> (for [pair pairs [tp tf] transforms-ws] [
+    (get-stream tp pair)
+    (fn [data] (apply put! pair (tf data)))
+  ]) (into {})))
 
 (defn put-recent-trades!
   "Get recent trades from REST and put them by callback"
@@ -127,12 +125,16 @@
       )))
 
 (defn transform-depths-rest [d]
-  (let [t (transform-depth-level (c/now) (:lastUpdateId d))]
-    (concat (for [[k t] [[:bids :b] [:asks :s]] [t (->> d k (map t))]))))
+  (let [tf (transform-depth-level (System/currentTimeMillis))]
+    (apply concat (for [[k t] {:bids :b :asks :s}] [t (->> d k (map tf))]))
+    ))
+
+(defn print-pass
+  [v] (println "PASS:" v) v)
 
 (defn put-current-depths!
   "Get depth from REST and put them by callback"
-  [conn pairs put!]
+  [pairs put!]
   (doseq [pair pairs]
     (->> @(http/get (depth-rest-query pair))
       :body
@@ -140,7 +142,7 @@
       json/read-str
       w/keywordize-keys
       transform-depths-rest
-      ;(println "DEPTH:")
+      ;print-pass
       (apply put! pair)
       )))
 
@@ -151,15 +153,16 @@
       ws @(http/websocket-client (str
         "wss://stream.binance.com:9443/stream?streams="
         (clojure.string/join "/" (concat
-          (map trade-stream pairs)
-          (map depth-stream pairs)
+          (map (partial get-stream :t) pairs)
+          (map (partial get-stream :d) pairs)
         ))))
-      actions (trades-put-map pairs put!)
+      actions (put-map pairs put!)
     ]
-    (println "Connected to Binance.")
-    (s/put-all! ws [(ws-query pairs pairs)])
+    (println "Binance: connected")
+    (s/put-all! ws [(ws-query :t pairs :d pairs)])
     (put-recent-trades! pairs put!)
-    (put-current-depths! conn pairs put-depth!)
+    (put-current-depths! pairs put!)
+    (println "Binance: cycle started.")
     (while true (let [
         chunk (json/read-str @(s/take! ws))
         action (get actions (get chunk "stream"))
