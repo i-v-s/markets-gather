@@ -60,7 +60,6 @@
   (fn put! [pair & args]
     (let [data (apply hash-map args)]
       ;(print (first market)) (flush)
-      ;(println "PUT!" pair "data:" data)
       (doseq [[tp rows] data]
         ;(println "tp is" tp)
         (assert (keyword? tp))

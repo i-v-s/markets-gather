@@ -1,32 +1,12 @@
-# gather
+# market-gather
 
-FIXME: description
-
-## Installation
-
-Download from http://example.com/FIXME.
+This utility collects data from online marketplaces like Binance or Exmo,
+and puts it into the Clickhouse database.
 
 ## Usage
 
-FIXME: explanation
+    $ lein run gather
 
-    $ java -jar gather-0.1.0-standalone.jar [args]
-
-## Options
-
-FIXME: listing of options this app accepts.
-
-## Examples
-
-...
-
-### Bugs
-
-...
-
-### Any Other Sections
-### That You Think
-### Might be Useful
 
 ## License
 
