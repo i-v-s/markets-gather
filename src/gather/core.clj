@@ -56,16 +56,23 @@
 
 (defn market-inserter
   "Return function, that inserts rows to Clickhouse"
-  [conn market]
-  (fn [pair & args]
+  [conn market counters show!]
+  (fn put! [pair & args]
     (let [data (apply hash-map args)]
-      (print (first market)) (flush)
+      ;(print (first market)) (flush)
       ;(println "PUT!" pair "data:" data)
       (doseq [[tp rows] data]
         ;(println "tp is" tp)
         (assert (keyword? tp))
         ;(println market pair (count rows) tp)
         (ch/insert-many! conn (market-insert-query market pair tp) rows)
+        (let [key [pair tp] val (get counters key)]
+          (if (nil? val)
+            (println "\nWarning" market "Counter not found:" key)
+            (do
+              (swap! val (partial + (count rows)))
+              (show!))
+          ))
         ))))
 
 (def ch-url "jdbc:clickhouse://127.0.0.1:9000")
@@ -92,15 +99,32 @@
   [db-url markets]
   (let [
     conn (ch/connect db-url)
+    counters (into {} (for [[market pairs] markets]
+      [market (into {} (for [pair pairs tp [:t :s :b]]
+        [[pair tp] (atom 0)]))]))
+    show! (fn [] (->>
+      (for [[market pairs] counters]
+        (str market " " (c/comma-join
+          (for [[k v] (c/atom-map-sum second pairs)]
+            (str v (name k))))))
+      c/comma-join
+      (str "\r")
+      print) (flush))
     ]
     (doseq [[market pairs] markets]
       (create-market-tables conn market pairs))
     (doseq [[market pairs] markets]
       (c/forever-loop market
         (fn []
+          (println (str "\n" (new java.util.Date) ": Starting " market))
           ((get gather-map market)
           pairs
-          (market-inserter (ch/connect db-url) market)))))
+          (market-inserter
+            (ch/connect db-url)
+            market
+            (get counters market)
+            show!)
+            ))))
     (loop [] (Thread/sleep 5000) (recur))))
 
 (def pairs-list {

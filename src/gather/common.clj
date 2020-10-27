@@ -45,3 +45,12 @@
   "Return current time"
   []
   (new java.sql.Timestamp (System/currentTimeMillis)))
+
+(defn atom-map-sum
+  "aggregate "
+  [f m]
+  (reduce-kv
+    (fn [m k v]
+      (let [kr (f k)]
+        (assoc m kr (+ @v (get m kr 0)))))
+    {} m))

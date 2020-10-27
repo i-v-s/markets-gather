@@ -158,11 +158,10 @@
         ))))
       actions (put-map pairs put!)
     ]
-    (println "Binance: connected")
+    (println "Binance connected")
     (s/put-all! ws [(ws-query :t pairs :d pairs)])
     (put-recent-trades! pairs put!)
     (put-current-depths! pairs put!)
-    (println "Binance: cycle started.")
     (while true (let [
         chunk (json/read-str @(s/take! ws))
         action (get actions (get chunk "stream"))
