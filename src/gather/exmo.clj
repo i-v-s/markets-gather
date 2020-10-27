@@ -23,6 +23,10 @@
   [topic]
   (fn [item] (str "spot/" topic ":" (clojure.string/replace item "-" "_"))))
 
+(defn dexmo-pair
+  "Convert pair name format from Exmo"
+  [pair] (clojure.string/replace pair "_" "-"))
+
 (defn ws-query
   "Prepare Exmo websocket request"
   [trades]
@@ -34,9 +38,9 @@
 
 (defn gather
   "Gather from Exmo"
-  [conn trades put-trades!]
+  [trades put!]
   (let [ws @(http/websocket-client "wss://ws-api.exmo.com:443/v1/public")]
-    (println "Connected to Exmo")
+    (println "Exmo connected")
     (s/put-all! ws [(ws-query trades)])
     (while true (let [chunk (json/read-str @(s/take! ws))]
       (if (= "update" (get chunk "event"))
@@ -46,5 +50,5 @@
           data (get chunk "data")
           ]
           (case topic
-            "spot/trades" (put-trades! conn "Exmo" pair (map transform-trade data))))
+            "spot/trades" (put! (dexmo-pair pair) :t (map transform-trade data))))
     )))))

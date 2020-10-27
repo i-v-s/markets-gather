@@ -13,10 +13,16 @@
   [items]
   (clojure.string/join ", " items))
 
-(defn trades-table-name
-  "Get table name for trades"
-  [market pair]
-  (str "fx." (lower market) "_" (lower pair) "_trades"))
+(def table-types {
+  :t "trades"
+  :b "buy"
+  :s "sell"
+  })
+
+(defn get-table-name
+  "Get table name for trades or depths"
+  [market pair type]
+  (str "fx." (lower market) "_" (lower pair) "_" (type table-types)))
 
 (defn try-loop
   "Try to call function in loop"
@@ -24,7 +30,9 @@
   (loop []
     (try
        (func)
-       (catch Exception e (println "\n" title " exception: " (.getMessage e))))
+       (catch Exception e
+         (println "\n" title "exception:")
+         (clojure.stacktrace/print-stack-trace e)))
     (Thread/sleep 1000)
     (recur)))
 
@@ -32,3 +40,17 @@
   "Execute function in loop"
   [title func]
   (a/thread (try-loop title func)))
+
+(defn now
+  "Return current time"
+  []
+  (new java.sql.Timestamp (System/currentTimeMillis)))
+
+(defn atom-map-sum
+  "aggregate "
+  [f m]
+  (reduce-kv
+    (fn [m k v]
+      (let [kr (f k)]
+        (assoc m kr (+ @v (get m kr 0)))))
+    {} m))

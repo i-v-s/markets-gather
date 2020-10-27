@@ -22,6 +22,35 @@
   [stmt query]
   (.executeQuery stmt query))
 
+(defn get-metadata
+  [result-set]
+  (let [md (.getMetaData result-set)]
+    (->> md .getColumnCount inc (range 1) (map (fn [i] [
+      (->> i (.getColumnLabel md) keyword)
+      (.getColumnTypeName md i)
+    ]))
+    ;(into {})
+    )))
+
+(defn fetch-row
+  [result-set metadata]
+  (->> metadata (map-indexed (fn [i [k t]]
+    (let [j (inc i)] {k (case t
+      "UInt8" (.getLong result-set j)
+      "String" (.getString result-set j)
+      )}))) (into {})))
+
+(defn fetch-all
+  "Fetch all rows from result-set"
+  [result-set]
+  (let [md (get-metadata result-set)]
+    (for [i (range) :while (.next result-set)] (fetch-row result-set md))))
+
+(defn fetch-tables
+  [st]
+  (exec-query! st "USE fx")
+  (->> "SHOW TABLES" (exec-query! st) fetch-all (map :name)))
+
 (defn exec-vec!
   "Execute vec of queries"
   [conn queries]
@@ -57,10 +86,9 @@
       (add-batch! p-st item))
     (.executeBatch p-st)))
 
-(defn column-query
-  [item]
-  (let [[key desc] item]
-    (str (name key) " " desc)))
+(defn column-desc-query
+  [[key desc]]
+  (str (name key) " " desc))
 
 (defn create-table-query
   "Return create table query"
@@ -72,9 +100,18 @@
     }
     }]
   (str
-    "CREATE TABLE IF NOT EXISTS " name "("
-    (clojure.string/join ", " (map column-query rec))
+    "CREATE TABLE IF NOT EXISTS " name " ("
+    (c/comma-join (map column-desc-query rec))
     ") ENGINE = " engine
-    " ORDER BY " (c/comma-join order-by)
+    " ORDER BY (" (c/comma-join order-by) ")"
     (if partition-by (str " PARTITION BY " partition-by) "")
     ))
+
+(defn insert-query
+  [table rec]
+  (str
+    "INSERT INTO " table " ("
+    (c/comma-join (for [[key desc] rec] (name key)))
+    ") VALUES ("
+    (c/comma-join (for [a rec] "?"))
+    ")"))

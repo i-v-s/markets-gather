@@ -8,42 +8,72 @@
     [manifold.bus :as bus]
     [clojure.core.async :as a]
     [gather.ch :as ch]
+    [gather.drop :as drop]
     [gather.common :as c]
     [gather.exmo :as exmo]
     [gather.binance :as binance]))
 
-(def trade-rec {
-  :id "Int32 CODEC(Delta, LZ4)"
-  :time "DateTime"
-  :buy "UInt8"
-  :price "Float64 CODEC(Gorilla)"
-  :coin "Float32"
-  :base "Float32"
-  })
+(def trade-rec [{
+    :id "Int32 CODEC(Delta, LZ4)"
+    :time "DateTime"
+    :buy "UInt8"
+    :price "Float64 CODEC(Gorilla)"
+    :coin "Float32"
+    :base "Float32"
+  }
+  :engine "ReplacingMergeTree()"
+  :partition-by "toYYYYMM(time)"
+  :order-by ["id"]
+  ])
+
+(def depth-rec [{
+    :time "DateTime"
+    :price "Float64 CODEC(Gorilla)"
+    :base "Float32"
+  }
+  :engine "ReplacingMergeTree()"
+  :partition-by "toYYYYMM(time)"
+  :order-by ["time" "price"]
+  ])
+
+(def table-types {
+  :t trade-rec
+  :b depth-rec
+  :s depth-rec})
 
 (defn create-market-tables-queries
   "Get queries for market tables creation"
   [market pairs]
-  (concat
-    ["CREATE DATABASE IF NOT EXISTS fx"]
-    (map (fn [pair]
-      (ch/create-table-query
-        (c/trades-table-name market pair) trade-rec
-      :engine "ReplacingMergeTree()" :partition-by "toYYYYMM(time)" :order-by ["id"]))
-      pairs)
-  ))
+  (concat ["CREATE DATABASE IF NOT EXISTS fx"]
+    (for [pair pairs [type rec] table-types]
+      (apply ch/create-table-query (c/get-table-name market pair type) rec))))
 
-(defn put-trades!
-  "Put trades record into Clickhouse"
-  [conn market pair trades]
-  (print (get market 0))(flush)
-  ;(println market pair "trades" (count trades))
-  (ch/insert-many! conn
-    (str
-      "INSERT INTO " (c/trades-table-name market pair)
-      "(id, time, buy, price, coin, base) VALUES (?, ?, ?, ?, ?, ?)")
-    trades
-  ))
+(defn market-insert-query
+  [market pair type]
+  (ch/insert-query
+    (c/get-table-name market pair type)
+    (first (type table-types))))
+
+(defn market-inserter
+  "Return function, that inserts rows to Clickhouse"
+  [conn market counters show!]
+  (fn put! [pair & args]
+    (let [data (apply hash-map args)]
+      ;(print (first market)) (flush)
+      ;(println "PUT!" pair "data:" data)
+      (doseq [[tp rows] data]
+        ;(println "tp is" tp)
+        (assert (keyword? tp))
+        ;(println market pair (count rows) tp)
+        (ch/insert-many! conn (market-insert-query market pair tp) rows)
+        (let [key [pair tp] val (get counters key)]
+          (if (nil? val)
+            (println "\nWarning" market "Counter not found:" key)
+            (do
+              (swap! val (partial + (count rows)))
+              (show!))
+          ))
+        ))))
 
 (def ch-url "jdbc:clickhouse://127.0.0.1:9000")
 
@@ -69,22 +99,47 @@
   [db-url markets]
   (let [
     conn (ch/connect db-url)
+    counters (into {} (for [[market pairs] markets]
+      [market (into {} (for [pair pairs tp [:t :s :b]]
+        [[pair tp] (atom 0)]))]))
+    show! (fn [] (->>
+      (for [[market pairs] counters]
+        (str market " " (c/comma-join
+          (for [[k v] (c/atom-map-sum second pairs)]
+            (str v (name k))))))
+      c/comma-join
+      (str "\r")
+      print) (flush))
     ]
     (doseq [[market pairs] markets]
       (create-market-tables conn market pairs))
     (doseq [[market pairs] markets]
       (c/forever-loop market
-        (fn [] ((get gather-map market) (ch/connect db-url) pairs put-trades!))))
+        (fn []
+          (println (str "\n" (new java.util.Date) ": Starting " market))
+          ((get gather-map market)
+          pairs
+          (market-inserter
+            (ch/connect db-url)
+            market
+            (get counters market)
+            show!)
+            ))))
     (loop [] (Thread/sleep 5000) (recur))))
+
+(def pairs-list {
+  "Binance" [
+    "BTC-USDT" "ETH-USDT" "BNB-USDT" "DOT-USDT"]
+  "Exmo" [
+    "BTC-USD" "ETH-USD" "XRP-USD" "BCH-USD" "EOS-USD" "DASH-USD" "WAVES-USD"
+    "ADA-USD" "LTC-USD" "BTG-USD" "ATOM-USD" "NEO-USD" "ETC-USD" "XMR-USD"
+    "ZEC-USD" "TRX-USD"]
+  })
 
 (defn -main
   "Start with params"
-  [arg]
-  (main ch-url {
-    "Binance" [
-      "BTC-USDT" "ETH-USDT" "BNB-USDT" "DOT-USDT"]
-    "Exmo" [
-      "BTC-USD" "ETH-USD" "XRP-USD" "BCH-USD" "EOS-USD" "DASH-USD" "WAVES-USD"
-      "ADA-USD" "LTC-USD" "BTG-USD" "ATOM-USD" "NEO-USD" "ETC-USD" "XMR-USD"
-      "ZEC-USD" "TRX-USD"]
-    }))
+  [module & args]
+  (case module
+    "gather" (main ch-url pairs-list)
+    "gather.drop" (drop/-main ch-url args)
+  ))
