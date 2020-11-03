@@ -3,7 +3,8 @@
     [clojure.string :as str]
     [gather.ch :as ch]
     [gather.common :as c]
-    [clojure.java.shell :as sh]))
+    [clojure.java.shell :as sh]
+    [clojure.java.io :as io]))
 
 (defn partition-test
   [p] (cond
@@ -17,6 +18,7 @@
     ))
 
 (def shadow-dir "/var/lib/clickhouse/shadow")
+(def meta-dir "/var/lib/clickhouse/metadata")
 
 (defn list-files [sd] (file-seq sd))
 
@@ -34,22 +36,20 @@
     ]
     [table (str sd "/" (str/join "/" (subvec rp 0 3)))]))
 
-(defn pack-table!
-  [path table result]
+(defn pack-target!
+  [path target result]
   ;(println "tar" "-rvf" result table :dir path)
-  (let [{exit :exit err :err} (sh/sh "tar" "-rvf" result table :dir path)]
+  (let [{exit :exit err :err} (sh/sh "tar" "-rvf" result target :dir path)]
     (if (not= exit 0) (throw (Exception. err)))))
 
 (defn pack-shadow!
   [sd result]
-  (doseq [
-    [table path] (gather.backup/list-shadow-tables (clojure.java.io/file sd))
-    ]
-    (pack-table! path table result)))
+  (doseq [[table path] (gather.backup/list-shadow-tables (io/file sd))]
+    (pack-target! path table result)))
 
 (defn clean-dir
   [dir]
-  (doseq [name (.list (clojure.java.io/file dir))]
+  (doseq [name (.list (io/file dir))]
     (sh/sh "rm" "-r" (str dir "/" name))))
 
 (defn -main
@@ -63,21 +63,28 @@
       f-tabs (select-keys tabs (vec (distinct (mapcat
         (fn [wc] (filter (c/wc-test wc) (keys tabs)))
         wcs))))
-      result (-> "pwd" sh/sh :out str/trim (str "/backup.tar"))
+      result (-> "pwd" sh/sh :out str/trim (str "/backup" (or partitions "") ".tar"))
+      tmp-dir "/tmp"
+      meta-dir (str tmp-dir "/metadata")
     ]
     ;(println "Wildcards:" args)
     ;(println "Selected tables:" (keys f-tabs))
     (try
+      (io/make-parents (str meta-dir "/x"))
+      (clean-dir meta-dir)
       ;(println "Creating database backup")
       ;(ch/exec-query! st (str "CREATE DATABASE backup"))
       (doseq [[tab parts] f-tabs part (filter p-test parts)]
         (println "Processing" tab part)
         (ch/exec-query! st (str "ALTER TABLE fx." tab " FREEZE PARTITION " part))
+        (spit (str meta-dir "/" tab ".sql") (ch/show-table st (str "fx." tab)))
         )
       (println "Pack to" result)
       (pack-shadow! shadow-dir result)
       (println "Clean shadow")
       (clean-dir shadow-dir)
+      (println "Pack metadata")
+      (pack-target! tmp-dir "metadata" result)
         ;(ch/copy-table (str "fx." tab) (str "backup." tab))
         ;(println "Optimizing table backup." tab)
         ;(ch/exec-query! st (str "OPTIMIZE TABLE backup." tab))

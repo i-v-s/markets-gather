@@ -51,6 +51,10 @@
   (exec-query! st "USE fx")
   (->> "SHOW TABLES" (exec-query! st) fetch-all (map :name)))
 
+(defn show-table
+  [st table] (->> table
+    (str "SHOW CREATE TABLE ") (exec-query! st) fetch-all first :statement))
+
 (defn db-table-key
   [item] (str (:database item) "." (:table item)))
 
