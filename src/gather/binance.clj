@@ -21,7 +21,7 @@
   (-> item de-hyphen clojure.string/lower-case))
 
 (defn upper-pair
-  "Convert pair to lower name"
+  "Convert pair to upper name"
   [item]
   (-> item de-hyphen clojure.string/upper-case))
 
@@ -40,6 +40,8 @@
     :params (apply concat (for [[type pairs] (apply hash-map streams)]
       (map (partial get-stream type) pairs)))
   }))
+
+(def rest-urls {:t "/api/v3/trades" :d "/api/v3/depth"})
 
 (defn trades-rest-query
   "Prepare REST url request for trades"
@@ -85,8 +87,7 @@
 
 (defn transform-depth-level
   "Transform Binance depth record to Clickhouse row"
-  [time]
-  (let [ts (new java.sql.Timestamp time)]
+  [time] (let [ts (new java.sql.Timestamp time)]
     (fn [[p q]] (let [price (Double/parseDouble p)] [
       ts
       price

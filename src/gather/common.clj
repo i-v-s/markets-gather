@@ -1,5 +1,6 @@
 (ns gather.common
   (:require
+    [clojure.string :as str]
     [clojure.core.async :as a]
   ))
 
@@ -18,6 +19,14 @@
   :b "buy"
   :s "sell"
   })
+
+(defn wc-test
+  "Wildcard test"
+  [wc]
+  (cond
+    (= wc "*") (fn [s] true)
+    (str/starts-with? wc "*") (fn [s] (str/ends-with? s (subs wc 1)))
+    ))
 
 (defn get-table-name
   "Get table name for trades or depths"
@@ -54,3 +63,27 @@
       (let [kr (f k)]
         (assoc m kr (+ @v (get m kr 0)))))
     {} m))
+
+(defn vec-to-map-of-vec
+  "Convert vector of records to map of vectors"
+  [key value coll]
+  (reduce
+    (fn [coll item]
+      (let [kr (key item)]
+        (assoc coll kr (conj (get coll kr []) (value item)))))
+    {} coll))
+
+(defn filter-keys
+  [f coll]
+  (reduce-kv
+    (fn [coll k v]
+      (if (f k) (assoc coll k v) coll)
+      {} coll)))
+
+(defn to-uint [s] (Integer/parseUnsignedInt s))
+
+(defn within
+  [a b v]
+  (and
+    (>= v a)
+    (<= v b)))

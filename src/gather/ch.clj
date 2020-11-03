@@ -51,6 +51,23 @@
   (exec-query! st "USE fx")
   (->> "SHOW TABLES" (exec-query! st) fetch-all (map :name)))
 
+(defn db-table-key
+  [item] (str (:database item) "." (:table item)))
+
+(defn fetch-partitions
+  "Fetch partitions"
+  [st & {:keys [db]}]
+  (->>
+    (str
+      "SELECT partition, database, table "
+      "FROM system.parts "
+      (if db (str "WHERE database = '" db "' ") "")
+      "GROUP BY partition, database, table "
+      "ORDER BY database, table, partition")
+    (exec-query! st)
+    fetch-all
+    (c/vec-to-map-of-vec (if db :table db-table-key) :partition)))
+
 (defn exec-vec!
   "Execute vec of queries"
   [conn queries]
@@ -115,3 +132,10 @@
     ") VALUES ("
     (c/comma-join (for [a rec] "?"))
     ")"))
+
+(defn copy-table
+  [st from to]
+  (println "Creating table" to)
+  (exec-query! st (str "CREATE TABLE IF NOT EXISTS" to " AS " from))
+  (println "Coping from" from "to" to)
+  (exec-query! st (str "INSERT INTO " to " SELECT * FROM " from)))

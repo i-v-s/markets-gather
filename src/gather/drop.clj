@@ -1,12 +1,7 @@
 (ns gather.drop
   (:require
-    [clojure.string :as str]
+    [gather.common :as c]
     [gather.ch :as ch]))
-
-(defn wc-test
-  "Wildcard test"
-  [wc]
-  (if (str/starts-with? wc "*") (fn [s] (str/ends-with? s (subs wc 1)))))
 
 (defn -main
   "Start with params"
@@ -15,7 +10,7 @@
       st (ch/connect-st db-url)
       tabs (ch/fetch-tables st)
       f-tabs (vec (distinct (mapcat
-        (fn [arg] (filter (wc-test arg) tabs))
+        (fn [arg] (filter (c/wc-test arg) tabs))
         args)))
     ]
     (println "Wildcards:" args)

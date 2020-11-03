@@ -9,6 +9,7 @@
     [clojure.core.async :as a]
     [gather.ch :as ch]
     [gather.drop :as drop]
+    [gather.backup :as backup]
     [gather.common :as c]
     [gather.exmo :as exmo]
     [gather.binance :as binance]))
@@ -141,4 +142,5 @@
   (case module
     "gather" (main ch-url pairs-list)
     "gather.drop" (drop/-main ch-url args)
+    "gather.backup" (apply backup/-main ch-url args)
   ))

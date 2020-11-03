@@ -19,7 +19,7 @@
   [row]
   [
     (Integer/parseInt (get row 0))
-    [(c/trades-table-name (get row 4) (get row 1)) (get row 4) (get row 1)]
+    [(c/get-table-name (get row 4) (get row 1) :t) (get row 4) (get row 1)]
   ])
 
 (defn read-map
