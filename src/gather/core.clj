@@ -10,6 +10,7 @@
     [gather.ch :as ch]
     [gather.drop :as drop]
     [gather.backup :as backup]
+    [gather.restore :as restore]
     [gather.common :as c]
     [gather.exmo :as exmo]
     [gather.binance :as binance]))
@@ -143,4 +144,5 @@
     "gather" (main ch-url pairs-list)
     "gather.drop" (drop/-main ch-url args)
     "gather.backup" (apply backup/-main ch-url args)
+    "gather.restore" (apply restore/-main ch-url args)
   ))

@@ -2,6 +2,7 @@
   (:require
     [clojure.string :as str]
     [clojure.core.async :as a]
+    [clojure.java.shell :as sh]
   ))
 
 (defn lower
@@ -87,3 +88,21 @@
   (and
     (>= v a)
     (<= v b)))
+
+(defn exec!
+  [& args]
+  (let [{exit :exit err :err out :out} (apply sh/sh args)]
+    (if (not= exit 0) (throw (Exception. err)) out)))
+
+(defn pwd "Current directory" [] (-> "pwd" exec! str/trim))
+
+(defn ls [& args] (str/split-lines (apply exec! "ls" args)))
+
+(defn extract! [archive destination]
+  (exec! "tar" "-xvf" archive :dir destination))
+
+(defn mv! [dst & src]
+  (apply exec! "mv" "-t" dst src))
+
+(defn mv-all! [src dst]
+  (->> src ls (map (partial str src "/")) (apply mv! dst)))

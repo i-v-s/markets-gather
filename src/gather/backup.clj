@@ -72,10 +72,8 @@
     (try
       (io/make-parents (str meta-dir "/x"))
       (clean-dir meta-dir)
-      ;(println "Creating database backup")
-      ;(ch/exec-query! st (str "CREATE DATABASE backup"))
       (doseq [[tab parts] f-tabs part (filter p-test parts)]
-        (println "Processing" tab part)
+        (println "Freezing" tab part)
         (ch/exec-query! st (str "ALTER TABLE fx." tab " FREEZE PARTITION " part))
         (spit (str meta-dir "/" tab ".sql") (ch/show-table st (str "fx." tab)))
         )
@@ -85,11 +83,6 @@
       (clean-dir shadow-dir)
       (println "Pack metadata")
       (pack-target! tmp-dir "metadata" result)
-        ;(ch/copy-table (str "fx." tab) (str "backup." tab))
-        ;(println "Optimizing table backup." tab)
-        ;(ch/exec-query! st (str "OPTIMIZE TABLE backup." tab))
-        ;(println "Detaching table backup." tab)
-        ;(ch/exec-query! st (str "DETACH TABLE backup." tab)))
       (println "Completed")
     (catch Exception e
       (println "\nException:" (.getMessage e))))))
