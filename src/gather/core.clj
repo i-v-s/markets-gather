@@ -62,12 +62,12 @@
   (swap! item (fn [[c v]]
     (list
       (+ c (count rows))
-      (concat v rows)
+      (into v rows)
     ))))
 
 (defn pop-buf!
   "Pop rows only from atom with form '(count, rows)"
-  [item] (-> (swap-vals! item #(list (first %) ())) first second))
+  [item] (-> (swap-vals! item #(list (first %) [])) first second))
 
 (defn market-inserter
   "Return function, that inserts rows to Clickhouse"
@@ -101,7 +101,7 @@
   (let [
       buffers (into {} (for [[market pairs] markets]
         [market (into {} (for [pair pairs tp [:t :s :b]]
-          [(list pair tp) (atom (list 0 ()))]))]))
+          [(list pair tp) (atom (list 0 []))]))]))
       show! #(do (->>
         (for [[market pairs] buffers]
           (str market " " (c/comma-join
@@ -119,8 +119,8 @@
         (try
           (ch/insert-many! % (market-insert-query market pair tp) rows)
           (catch Exception e
-            (println "\nException on insert" market pair tp "repushing...")
-            (swap! buf (fn [[c v]](list c (concat rows v))))
+            (println "\nException on insert" market pair tp "- repushing...")
+            (swap! buf (fn [[c v]](list c (into rows v))))
             (throw e))))
     ]
     (run! (partial apply create-market-tables! (ch/connect db-url)) markets)
