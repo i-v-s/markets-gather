@@ -56,6 +56,14 @@
   []
   (new java.sql.Timestamp (System/currentTimeMillis)))
 
+(defn throttle
+  [ms f!]
+  (let [last (atom 0)]
+    (fn [& args]
+      (let [t (System/currentTimeMillis)]
+        (if (> t @last)
+          (do (apply f! args) (reset! last (+ ms t))))))))
+
 (defn atom-map-sum
   "aggregate "
   [f m]

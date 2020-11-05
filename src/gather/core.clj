@@ -111,6 +111,7 @@
       c/comma-join
       (str "\r")
       print) (flush))
+    show-throttled! (c/throttle 200 show!)
     ]
     (doseq [[market pairs] markets]
       (create-market-tables conn market pairs))
@@ -124,7 +125,7 @@
             (ch/connect db-url)
             market
             (get counters market)
-            show!)
+            show-throttled!)
             ))))
     (loop [] (Thread/sleep 5000) (recur))))
 
