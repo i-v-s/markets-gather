@@ -106,7 +106,7 @@
     show! (fn [] (->>
       (for [[market pairs] counters]
         (str market " " (c/comma-join
-          (for [[k v] (c/atom-map-sum second pairs)]
+          (for [[k v] (c/map-sum pairs :k second)]
             (str v (name k))))))
       c/comma-join
       (str "\r")

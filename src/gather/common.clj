@@ -64,13 +64,13 @@
         (if (> t @last)
           (do (apply f! args) (reset! last (+ ms t))))))))
 
-(defn atom-map-sum
-  "aggregate "
-  [f m]
+(defn map-sum
+  "Summarize hashmap values by key aggregation"
+  [m & {:keys [k v] :or {v deref}}]
   (reduce-kv
-    (fn [m k v]
-      (let [kr (f k)]
-        (assoc m kr (+ @v (get m kr 0)))))
+    (fn [m ki vi]
+      (let [kr (k ki)]
+        (assoc m kr (+ (v vi) (get m kr 0)))))
     {} m))
 
 (defn vec-to-map-of-vec
