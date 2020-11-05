@@ -85,12 +85,10 @@
   [lines]
   (dorun (map println lines)))
 
-(defn create-market-tables
+(defn create-market-tables!
   "Create market tables"
   [conn market pairs]
-  (let [queries (create-market-tables-queries market pairs)]
-    (ch/exec-vec! conn queries)
-  ))
+  (ch/exec-vec! conn (create-market-tables-queries market pairs)))
 
 (def gather-map {
   "Exmo" exmo/gather
@@ -121,7 +119,7 @@
         ]
         (ch/insert-many! conn (market-insert-query market pair tp) rows))
     ]
-    (doseq [mp markets] (apply create-market-tables conn mp))
+    (run! (partial apply create-market-tables! conn) markets)
     (doseq [[market pairs] markets]
       (c/forever-loop market
         #(let [gather (get gather-map market) market-buf (get buffers market)]
