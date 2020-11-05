@@ -51,6 +51,10 @@
   [title func]
   (a/thread (try-loop title func)))
 
+(defn shutdown-hook
+  [f]
+  (.addShutdownHook (Runtime/getRuntime) (Thread. (f))))
+
 (defn now
   "Return current time"
   []

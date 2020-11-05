@@ -56,25 +56,27 @@
     (c/get-table-name market pair type)
     (first (type table-types))))
 
+(defn push-buf!
+  "Push rows in atom with form '(count, rows)"
+  [item rows]
+  (swap! item (fn [[c v]]
+    (list
+      (+ c (count rows))
+      (concat v rows)
+    ))))
+
+(defn pop-buf!
+  "Pop rows only from atom with form '(count, rows)"
+  [item] (-> (swap-vals! item #(list (first %) ())) first second))
+
 (defn market-inserter
   "Return function, that inserts rows to Clickhouse"
-  [conn market counters show!]
+  [market buffers]
   (fn put! [pair & args]
-    (let [data (apply hash-map args)]
-      ;(print (first market)) (flush)
-      (doseq [[tp rows] data]
-        ;(println "tp is" tp)
-        (assert (keyword? tp))
-        ;(println market pair (count rows) tp)
-        (ch/insert-many! conn (market-insert-query market pair tp) rows)
-        (let [key [pair tp] val (get counters key)]
-          (if (nil? val)
-            (println "\nWarning" market "Counter not found:" key)
-            (do
-              (swap! val (partial + (count rows)))
-              (show!))
-          ))
-        ))))
+    (doseq [[tp rows] (apply hash-map args)]
+      (assert (keyword? tp))
+      (push-buf! (get buffers (list pair tp)) rows))
+    ))
 
 (def ch-url "jdbc:clickhouse://127.0.0.1:9000")
 
@@ -99,35 +101,35 @@
   "Entry point"
   [db-url markets]
   (let [
-    conn (ch/connect db-url)
-    counters (into {} (for [[market pairs] markets]
-      [market (into {} (for [pair pairs tp [:t :s :b]]
-        [[pair tp] (atom 0)]))]))
-    show! (fn [] (->>
-      (for [[market pairs] counters]
-        (str market " " (c/comma-join
-          (for [[k v] (c/map-sum pairs :k second)]
-            (str v (name k))))))
-      c/comma-join
-      (str "\r")
-      print) (flush))
-    show-throttled! (c/throttle 200 show!)
+      conn (ch/connect db-url)
+      buffers (into {} (for [[market pairs] markets]
+        [market (into {} (for [pair pairs tp [:t :s :b]]
+          [(list pair tp) (atom (list 0 ()))]))]))
+      show! #(do (->>
+        (for [[market pairs] buffers]
+          (str market " " (c/comma-join
+            (for [[k v] (c/map-sum pairs :k second :v (comp first deref))]
+              (str v (name k))))))
+        c/comma-join
+        (str "\r")
+        print) (flush))
+      put! #(doseq [
+          [market pairs] buffers
+          [[pair tp] buf] pairs
+          :let [rows (pop-buf! buf)]
+          :when (not-empty rows)
+        ]
+        (ch/insert-many! conn (market-insert-query market pair tp) rows))
     ]
-    (doseq [[market pairs] markets]
-      (create-market-tables conn market pairs))
+    (doseq [mp markets] (apply create-market-tables conn mp))
     (doseq [[market pairs] markets]
       (c/forever-loop market
-        (fn []
+        #(let [gather (get gather-map market) market-buf (get buffers market)]
           (println (str "\n" (new java.util.Date) ": Starting " market))
-          ((get gather-map market)
-          pairs
-          (market-inserter
-            (ch/connect db-url)
-            market
-            (get counters market)
-            show-throttled!)
-            ))))
-    (loop [] (Thread/sleep 5000) (recur))))
+          (gather pairs (market-inserter market market-buf))
+        )))
+    (c/try-loop "Core" #(loop [] (Thread/sleep 2000) (put!) (show!) (recur)))
+  ))
 
 (def pairs-list {
   "Binance" [
