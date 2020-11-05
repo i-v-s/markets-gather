@@ -99,7 +99,6 @@
   "Entry point"
   [db-url markets]
   (let [
-      conn (ch/connect db-url)
       buffers (into {} (for [[market pairs] markets]
         [market (into {} (for [pair pairs tp [:t :s :b]]
           [(list pair tp) (atom (list 0 ()))]))]))
@@ -117,16 +116,32 @@
           :let [rows (pop-buf! buf)]
           :when (not-empty rows)
         ]
-        (ch/insert-many! conn (market-insert-query market pair tp) rows))
+        (try
+          (ch/insert-many! % (market-insert-query market pair tp) rows)
+          (catch Exception e
+            (println "\nException on insert" market pair tp "repushing...")
+            (swap! buf (fn [[c v]](list c (concat rows v))))
+            (throw e))))
     ]
-    (run! (partial apply create-market-tables! conn) markets)
-    (doseq [[market pairs] markets]
-      (c/forever-loop market
-        #(let [gather (get gather-map market) market-buf (get buffers market)]
+    (run! (partial apply create-market-tables! (ch/connect db-url)) markets)
+    (doseq [
+      [market pairs] markets
+      :let [gather! (get gather-map market) market-buf (get buffers market)]
+      ]
+      (c/forever-loop
+        #(do
           (println (str "\n" (new java.util.Date) ": Starting " market))
-          (gather pairs (market-inserter market market-buf))
-        )))
-    (c/try-loop "Core" #(loop [] (Thread/sleep 2000) (put!) (show!) (recur)))
+          (gather! pairs (market-inserter market market-buf))
+        ) :title market))
+    (c/try-loop
+      #(let [conn (ch/connect db-url)]
+        (println (str "\n" (new java.util.Date) ": Started Core"))
+        (loop []
+          (Thread/sleep 2000)
+          (put! conn)
+          (show!)
+          (recur))
+      ) :title "Core" :delay 10000)
   ))
 
 (def pairs-list {

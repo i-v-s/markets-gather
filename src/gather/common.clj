@@ -25,7 +25,7 @@
   "Wildcard test"
   [wc]
   (cond
-    (= wc "*") (fn [s] true)
+    (= wc "*") (constantly true)
     (str/starts-with? wc "*") (fn [s] (str/ends-with? s (subs wc 1)))
     ))
 
@@ -36,20 +36,20 @@
 
 (defn try-loop
   "Try to call function in loop"
-  [title func]
+  [func & {:keys [title delay] :or {delay 1000}}]
   (loop []
     (try
        (func)
        (catch Exception e
          (println "\n" title "exception:")
          (clojure.stacktrace/print-stack-trace e)))
-    (Thread/sleep 1000)
+    (Thread/sleep delay)
     (recur)))
 
 (defn forever-loop
   "Execute function in loop"
-  [title func]
-  (a/thread (try-loop title func)))
+  [func & args]
+  (a/thread (apply try-loop func args)))
 
 (defn shutdown-hook
   [f]
