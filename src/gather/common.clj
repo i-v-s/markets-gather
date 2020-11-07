@@ -19,6 +19,7 @@
   :t "trades"
   :b "buy"
   :s "sell"
+  :p "prices"
   })
 
 (defn wc-test

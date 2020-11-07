@@ -17,5 +17,5 @@
     ;(println "Tabs to drop:"  f-tabs)
     (doseq [tab f-tabs]
       (println "Dropping " tab)
-      (ch/exec-query! st (str "DROP TABLE fx." tab)))
-    ))
+      (ch/exec-query! st (str "DROP TABLE fx." tab))
+      )))

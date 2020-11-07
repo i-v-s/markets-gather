@@ -38,10 +38,20 @@
   :order-by ["time" "price"]
   ])
 
+(def price-rec [{
+  :time "DateTime"
+  :buy "Float64 CODEC(Gorilla)"
+  }
+  :engine "ReplacingMergeTree()"
+  :partition-by "toYYYYMM(time)"
+  :order-by ["time"]
+  ])
+
 (def table-types {
   :t trade-rec
   :b depth-rec
-  :s depth-rec})
+  :s depth-rec
+  :p price-rec})
 
 (defn create-market-tables-queries
   "Get queries for market tables creation"
