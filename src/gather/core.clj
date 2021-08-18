@@ -55,10 +55,10 @@
 
 (defn create-market-tables-queries
   "Get queries for market tables creation"
-  [market pairs]
+  [market pairs settings]
   (concat ["CREATE DATABASE IF NOT EXISTS fx"]
     (for [pair pairs [type rec] table-types]
-      (apply ch/create-table-query (c/get-table-name market pair type) rec))))
+      (apply ch/create-table-query (c/get-table-name market pair type) (conj rec :settings settings)))))
 
 (defn market-insert-query
   [market pair type]
@@ -98,7 +98,7 @@
 (defn create-market-tables!
   "Create market tables"
   [conn market pairs]
-  (ch/exec-vec! conn (create-market-tables-queries market pairs)))
+  (ch/exec-vec! conn (create-market-tables-queries market pairs ["storage_policy = 'ssd_to_hdd'"])))
 
 (def gather-map {
   "Exmo" exmo/gather
@@ -156,7 +156,8 @@
 
 (def pairs-list {
   "Binance" [
-    "BTC-USDT" "ETH-USDT" "BNB-USDT" "DOT-USDT"]
+    "BTC-USDT" "ETH-USDT" "BNB-USDT" "DOT-USDT" "CFX-USDT" "ETC-USDT" "LTC-USDT" "RVN-USDT" "EOS-USDT" "1INCH-USDT" "MATIC-USDT"
+    "ZIL-USDT" "WAVES-USDT" "XRP-USDT" "TRX-USDT" "ADA-USDT" "DOGE-USDT" "CAKE-USDT" "VET-USDT" "BAKE-USDT" "DOT-USDT" "XMR-USDT"]
   "Exmo" [
     "BTC-USD" "ETH-USD" "XRP-USD" "BCH-USD" "EOS-USD" "DASH-USD" "WAVES-USD"
     "ADA-USD" "LTC-USD" "BTG-USD" "ATOM-USD" "NEO-USD" "ETC-USD" "XMR-USD"

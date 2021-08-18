@@ -114,10 +114,11 @@
 (defn create-table-query
   "Return create table query"
   [name rec & {
-    :keys [order-by engine partition-by]
+    :keys [order-by engine partition-by settings]
     :or {
       engine "MergeTree()"
       partition-by "toYYYYMM(time)"
+      settings []
     }
     }]
   (str
@@ -126,6 +127,7 @@
     ") ENGINE = " engine
     " ORDER BY (" (c/comma-join order-by) ")"
     (if partition-by (str " PARTITION BY " partition-by) "")
+    (if settings (str " SETTINGS " (c/comma-join settings)) "")
     ))
 
 (defn insert-query
