@@ -3,6 +3,9 @@
     [clojure.string :as str]
     [clojure.core.async :as a]
     [clojure.java.shell :as sh]
+    [clojure.data.json :as json]
+    [byte-streams :as bs]
+    [aleph.http :as http]
   ))
 
 (defn lower
@@ -21,6 +24,32 @@
   :s "sell"
   :p "prices"
   })
+
+(defn url-encode-params
+  "Encode params in url"
+  [url & params]
+  (if
+    (empty? params)
+    url
+    (->> params
+      (apply hash-map)
+      (filter #(some? (last %)))
+      (map (fn [[k v]] (str (name k) "=" v)))
+      (clojure.string/join "&")
+      (str url "?")
+    )))
+
+(defn http-get-json
+  "Get JSON data with HTTP GET request"
+  [url & params]
+  (->>
+    (apply url-encode-params url params)
+    http/get
+    deref
+    :body
+    bs/to-string
+    json/read-str
+  ))
 
 (defn wc-test
   "Wildcard test"

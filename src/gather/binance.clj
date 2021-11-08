@@ -10,6 +10,10 @@
     [gather.common :as c]
   ))
 
+(def intervals
+  "Chart intervals: (m)inutes, (h)ours, (d)ays, (w)eeks, (M)onths"
+  ["1m" "3m" "5m" "15m" "30m" "1h" "2h" "4h" "6h" "8h" "12h" "1d" "3d" "1w" "1M"])
+
 (defn de-hyphen
   "Remove hyphens from string"
   [item]
@@ -43,6 +47,10 @@
 
 (def rest-urls {:t "/api/v3/trades" :d "/api/v3/depth"})
 
+(defn info-rest-query
+  []
+  "https://www.binance.com/api/v3/exchangeInfo")
+
 (defn trades-rest-query
   "Prepare REST url request for trades"
   [pair]
@@ -58,6 +66,18 @@
     "https://www.binance.com/api/v3/depth?symbol="
     (upper-pair pair)
     "&limit=1000"))
+
+(defn candles-rest-query
+  "Prepare REST url for candles query"
+  [pair interval & {:keys [start end limit]}]
+  (c/url-encode-params
+    "https://api.binance.com/api/v3/klines"
+    :symbol (de-hyphen pair)
+    :interval interval
+    :startTime start
+    :endTime end
+    :limit limit
+    ))
 
 (defn transform-trade-ws
   "Transform Binance trade record from websocket to Clickhouse row"
@@ -105,6 +125,22 @@
   :d transform-depth-ws
   })
 
+(defn transform-candle-rest
+  "Transform candle record to Clickhouse row"
+  [[t, o, h, l, c, v, ct, qv, nt, bv, bqv]]
+  [
+    (new java.sql.Timestamp t)
+    (Double/parseDouble o)
+    (Double/parseDouble h)
+    (Double/parseDouble l)
+    (Double/parseDouble c)
+    (Float/parseFloat v)
+    (Float/parseFloat qv)
+    nt
+    (Float/parseFloat bv)
+    (Float/parseFloat bqv)
+  ])
+
 (defn put-map
   "Make callback map for streams"
   [pairs put!]
@@ -146,6 +182,24 @@
       ;print-pass
       (apply put! pair)
       )))
+
+(defn get-all-pairs
+  []
+  (->> (info-rest-query)
+    c/http-get-json
+    w/keywordize-keys
+    :symbols
+    (filter #(= (:status %) "TRADING"))
+    (map #(str (:baseAsset %) "-" (:quoteAsset %)))
+  ))
+
+(defn get-candles
+  "Get candles by REST"
+  [pair interval & {:keys [start end limit]}]
+  (->> (candles-rest-query pair interval :start start :end end :limit limit)
+    c/http-get-json
+    (map transform-candle-rest)
+  ))
 
 (defn gather
   "Gather from Binance"
