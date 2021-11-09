@@ -6,7 +6,6 @@
     [manifold.stream :as s]
     [aleph.http :as http]
     [byte-streams :as bs]
-    [manifold.deferred :as d]
     [gather.common :as c]
   ))
 

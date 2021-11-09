@@ -20,7 +20,13 @@
 (defn exec-query!
   "Execute SQL query"
   [stmt query]
-  (.executeQuery stmt query))
+  (try
+    (.executeQuery stmt query)
+    (catch Exception e
+      (println "\nException during SQL execution. Query was:")
+      (println query)
+      (throw e)
+  )))
 
 (defn get-metadata
   [result-set]
@@ -47,8 +53,8 @@
     (for [i (range) :while (.next result-set)] (fetch-row result-set md))))
 
 (defn fetch-tables
-  [st]
-  (exec-query! st "USE fx")
+  [st db]
+  (exec-query! st (str "USE " db))
   (->> "SHOW TABLES" (exec-query! st) fetch-all (map :name)))
 
 (defn show-table
@@ -127,7 +133,7 @@
     ") ENGINE = " engine
     " ORDER BY (" (c/comma-join order-by) ")"
     (if partition-by (str " PARTITION BY " partition-by) "")
-    (if settings (str " SETTINGS " (c/comma-join settings)) "")
+    (if (empty? settings) "" (str " SETTINGS " (c/comma-join settings)))
     ))
 
 (defn insert-query

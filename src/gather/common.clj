@@ -4,6 +4,7 @@
     [clojure.core.async :as a]
     [clojure.java.shell :as sh]
     [clojure.data.json :as json]
+    [clojure.tools.cli :refer [parse-opts]]
     [byte-streams :as bs]
     [aleph.http :as http]
   ))
@@ -12,6 +13,10 @@
   "Convert name to lowercase and '-' to '_'"
   [name]
   (clojure.string/lower-case (clojure.string/replace name "-" "_")))
+
+(def capitalize-key
+  "Converts :key to \"Key\""
+  (comp str/capitalize name))
 
 (defn comma-join
   "Join items with comma"
@@ -61,8 +66,8 @@
 
 (defn get-table-name
   "Get table name for trades or depths"
-  [market pair type]
-  (str "fx." (lower market) "_" (lower pair) "_" (type table-types)))
+  [db market item type]
+  (str db "." (lower (name market)) "_" (lower item) "_" (type table-types)))
 
 (defn try-loop
   "Try to call function in loop"
@@ -148,3 +153,26 @@
 
 (defn mv-all! [src dst]
   (->> src ls (map (partial str src "/")) (apply mv! dst)))
+
+(defn select-values [map ks]
+  (reduce #(conj %1 (map %2)) [] ks))
+
+(def cli-options {
+  :config ["-c" "--config CONFIG" "Config file name"
+    :default nil
+    ;:parse-fn #(Integer/parseInt %)
+    ;:validate [#(< 0 % 0x10000) "Must be a number between 0 and 65536"]
+    ]
+   ;; A non-idempotent option (:default is applied first)
+  ; ["-v" nil "Verbosity level"
+  ;  :id :verbosity
+  ;  :default 0
+  ;  :update-fn inc] ; Prior to 0.4.1, you would have to use:
+                   ;; :assoc-fn (fn [m k _] (update-in m [k] inc))
+   ;; A boolean option defaulting to nil
+  :help ["-h" "--help"]
+  })
+
+(defn select-options [&keys] (select-values cli-options keys))
+
+(defn parse-options [args & keys] (parse-opts args (select-values cli-options keys)))

@@ -11,7 +11,7 @@
                 "RVN-USDT", "EOS-USDT", "1INCH-USDT", "MATIC-USDT", "SOL-USDT", "UNI-USDT",
                 "ZIL-USDT", "WAVES-USDT", "XRP-USDT", "TRX-USDT", "ADA-USDT", "DOGE-USDT", "CAKE-USDT",
                 "VET-USDT", "BAKE-USDT", "DOT-USDT", "XMR-USDT", "SHIB-USDT", "WIN-USDT", "HOT-USDT"],
-            "candles": []
+            "candles": ["5m", "15m", "1h", "4h", "1d"]
         }
     }
 }

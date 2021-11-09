@@ -7,6 +7,7 @@
     [org.clojure/clojure "1.10.1"]
     [org.clojure/data.json "2.4.0"]
     [org.clojure/core.async "1.3.610"]
+    [org.clojure/tools.cli "1.0.206"]
     [org.clojure/tools.namespace "0.2.11"]
     [org.clojure/java.jdbc "0.7.11"]
     [org.clojure/data.csv "1.0.0"]
