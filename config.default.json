@@ -1,0 +1,17 @@
+{
+    "clickhouse": {
+        "url": "jdbc:clickhouse://127.0.0.1:9000",
+        "db": "debug",
+        "storage-policy": "ssd_to_hdd"
+    },
+    "markets": {
+        "binance": {
+            "raw-pairs": [
+                "BTC-USDT", "ETH-USDT", "BNB-USDT", "DOT-USDT", "CFX-USDT", "ETC-USDT", "LTC-USDT",
+                "RVN-USDT", "EOS-USDT", "1INCH-USDT", "MATIC-USDT", "SOL-USDT", "UNI-USDT",
+                "ZIL-USDT", "WAVES-USDT", "XRP-USDT", "TRX-USDT", "ADA-USDT", "DOGE-USDT", "CAKE-USDT",
+                "VET-USDT", "BAKE-USDT", "DOT-USDT", "XMR-USDT", "SHIB-USDT", "WIN-USDT", "HOT-USDT"],
+            "candles": []
+        }
+    }
+}

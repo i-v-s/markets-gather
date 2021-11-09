@@ -7,77 +7,16 @@
     [manifold.deferred :as d]
     [manifold.bus :as bus]
     [clojure.core.async :as a]
+    [gather.config :as config]
     [gather.ch :as ch]
+    [gather.storage :as storage]
     [gather.drop :as drop]
     [gather.backup :as backup]
     [gather.restore :as restore]
     [gather.common :as c]
     [gather.exmo :as exmo]
-    [gather.binance :as binance]))
-
-(def trade-rec [{
-    :id "Int32 CODEC(Delta, LZ4)"
-    :time "DateTime"
-    :buy "UInt8"
-    :price "Float64 CODEC(Gorilla)"
-    :coin "Float32"
-    :base "Float32"
-  }
-  :engine "ReplacingMergeTree()"
-  :partition-by "toYYYYMM(time)"
-  :order-by ["id"]
-  ])
-
-(def depth-rec [{
-    :time "DateTime"
-    :price "Float64 CODEC(Gorilla)"
-    :base "Float32"
-  }
-  :engine "ReplacingMergeTree()"
-  :partition-by "toYYYYMM(time)"
-  :order-by ["time" "price"]
-  ])
-
-(def price-rec [{
-  :time "DateTime"
-  :buy "Float64 CODEC(Gorilla)"
-  }
-  :engine "ReplacingMergeTree()"
-  :partition-by "toYYYYMM(time)"
-  :order-by ["time"]
-  ])
-
-(def table-types {
-  :t trade-rec
-  :b depth-rec
-  :s depth-rec
-  :p price-rec})
-
-(defn create-market-tables-queries
-  "Get queries for market tables creation"
-  [market pairs settings]
-  (concat ["CREATE DATABASE IF NOT EXISTS fx"]
-    (for [pair pairs [type rec] table-types]
-      (apply ch/create-table-query (c/get-table-name market pair type) (conj rec :settings settings)))))
-
-(defn market-insert-query
-  [market pair type]
-  (ch/insert-query
-    (c/get-table-name market pair type)
-    (first (type table-types))))
-
-(defn push-buf!
-  "Push rows in atom with form '(count, rows)"
-  [item rows]
-  (swap! item (fn [[c v]]
-    (list
-      (+ c (count rows))
-      (into v rows)
-    ))))
-
-(defn pop-buf!
-  "Pop rows only from atom with form '(count, rows)"
-  [item] (-> (swap-vals! item #(list (first %) [])) first second))
+    [gather.binance :as binance]
+  ))
 
 (defn market-inserter
   "Return function, that inserts rows to Clickhouse"
@@ -93,12 +32,8 @@
 (defn print-vec
   "Prints vector of strings"
   [lines]
-  (dorun (map println lines)))
-
-(defn create-market-tables!
-  "Create market tables"
-  [conn market pairs]
-  (ch/exec-vec! conn (create-market-tables-queries market pairs ["storage_policy = 'ssd_to_hdd'"])))
+  (dorun (map println lines)
+  ))
 
 (def gather-map {
   "Exmo" exmo/gather
@@ -107,11 +42,11 @@
 
 (defn main
   "Entry point"
-  [db-url markets]
+  [& config-fn]
   (let [
-      buffers (into {} (for [[market pairs] markets]
-        [market (into {} (for [pair pairs tp [:t :s :b]]
-          [(list pair tp) (atom (list 0 []))]))]))
+      {db :clickhouse markets :markets} (config/load-config config-fn)
+      db-url (:url db)
+      buffers (storage/prepare-buffers markets)
       show! #(do (->>
         (for [[market pairs] buffers]
           (str market " " (c/comma-join
@@ -127,13 +62,13 @@
           :when (not-empty rows)
         ]
         (try
-          (ch/insert-many! % (market-insert-query market pair tp) rows)
+          (ch/insert-many! % (storage/market-insert-query market pair tp) rows)
           (catch Exception e
             (println "\nException on insert" market pair tp "- repushing...")
             (swap! buf (fn [[c v]](list c (into rows v))))
             (throw e))))
     ]
-    (run! (partial apply create-market-tables! (ch/connect db-url)) markets)
+    (run! (partial apply storage/create-market-tables! (ch/connect db-url)) markets)
     (doseq [
       [market pairs] markets
       :let [gather! (get gather-map market) market-buf (get buffers market)]

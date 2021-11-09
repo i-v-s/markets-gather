@@ -77,7 +77,7 @@
     (recur)))
 
 (defn forever-loop
-  "Execute function in loop"
+  "Execute function in async thread loop"
   [func & args]
   (a/thread (apply try-loop func args)))
 
