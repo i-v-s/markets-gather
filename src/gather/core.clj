@@ -24,7 +24,7 @@
   (fn put! [pair & args]
     (doseq [[tp rows] (apply hash-map args)]
       (assert (keyword? tp))
-      (push-buf! (get buffers (list pair tp)) rows))
+      (storage/push-buf! (get buffers (list pair tp)) rows))
     ))
 
 (def ch-url "jdbc:clickhouse://127.0.0.1:9000")
@@ -58,7 +58,7 @@
       put! #(doseq [
           [market pairs] buffers
           [[pair tp] buf] pairs
-          :let [rows (pop-buf! buf)]
+          :let [rows (storage/pop-buf! buf)]
           :when (not-empty rows)
         ]
         (try
