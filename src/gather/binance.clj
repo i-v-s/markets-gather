@@ -200,7 +200,7 @@
     (map transform-candle-rest)
   ))
 
-(defn gather
+(defn gather-ws
   "Gather from Binance"
   [pairs put!]
   (let [

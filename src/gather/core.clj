@@ -27,8 +27,12 @@
   ))
 
 (def gather-map {
-  :exmo exmo/gather
-  :binance binance/gather
+  :exmo {
+    :ws exmo/gather-ws
+    :get-all-pairs exmo/get-all-pairs}
+  :binance {
+    :ws binance/gather-ws
+    :get-all-pairs binance/get-all-pairs}
   })
 
 (defn raw-insert-loop!
@@ -53,13 +57,20 @@
     (run! (partial apply storage/create-market-tables! db-cfg) markets)
     (doseq [
         [market {pairs :raw-pairs}] markets
-        :let [gather! (market gather-map) market-buf (market buffers) market-name (c/capitalize-key market)]
-      ]
-      (c/forever-loop
-        #(do
-          (println (str "\n" (new java.util.Date) ": Starting " market-name))
-          (gather! pairs (market-inserter market market-buf))
-        ) :title market-name))
+        :let [
+          funcs (market gather-map)
+          all-pairs ((:get-all-pairs funcs))
+          market-buf (market buffers)
+          market-name (c/capitalize-key market)
+        ]]
+      (c/forever-loop #(do
+        (println (str "\n" (new java.util.Date) " Starting " market-name " WS"))
+        ((:ws funcs) pairs (market-inserter market market-buf))
+      ) :title (str market-name " WS"))
+      ;(c/forever-loop #(do
+      ;  (println (str "\n" (new java.util.Date) " Starting " market-name " REST"))
+      ;) :title (str market-name " REST")
+      )
     (c/try-loop (partial raw-insert-loop! buffers db-cfg) :title "Core" :delay 10000)
   ))
 
