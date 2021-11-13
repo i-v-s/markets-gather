@@ -69,7 +69,7 @@
 
 (defn create-market-tables!
   "Create market tables"
-  [{db :db url :url policy :storage-policy} market {pairs :raw-pairs}]
+  [{db :db url :url policy :storage-policy} {market :name {pairs :pairs} :raw}]
   ;(println
   (ch/exec-vec!
     (ch/connect url)
@@ -92,11 +92,10 @@
   [] (atom (list 0 [])))
 
 (defn make-raw-buffers
-  "Prepare empty write buffers in form {market {[\"name\" :tp] buffer}}. \"name\" may be pair or candle interval"
-  [markets-config]
-  (into {} (for [[market {pairs :raw-pairs}] markets-config]
-    [market (into {} (for [pair pairs tp [:t :s :b]]
-      [(list pair tp) (make-buffer)]))])))
+  "Prepare empty write buffers in form {[\"name\" :tp] buffer}. \"name\" may be pair or candle interval"
+  [raw-pairs]
+  (into {} (for [pair raw-pairs tp [:t :s :b]]
+    [(list pair tp) (make-buffer)])))
 
 (defn push-buf!
   "Push rows in atom with form '(count, rows)"
@@ -140,3 +139,17 @@
      c/comma-join
      (str "\r")
      print) (flush)))
+
+(defprotocol Market
+  "A protocol that abstracts exchange interactions"
+  (get-all-pairs [this] "Return all pairs for current market")
+  (gather-ws-loop! [this] "Gather raw data via websockets")
+)
+
+(defrecord RawData [pairs buffers])
+(defrecord CandlesData [pairs intervals])
+
+(defn make-raw-data
+  "Prepare empty write buffers in form {market {[\"name\" :tp] buffer}}. \"name\" may be pair or candle interval"
+  [raw-pairs]
+  (RawData. raw-pairs (make-raw-buffers raw-pairs)))

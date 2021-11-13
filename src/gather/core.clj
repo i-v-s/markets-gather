@@ -1,14 +1,12 @@
 (ns gather.core
   (:require
-    [gather.config :as config]
+    [gather.config :as cfg]
     [gather.ch :as ch]
-    [gather.storage :as storage]
+    [gather.storage :as sg]
     [gather.drop :as drop]
     [gather.backup :as backup]
     [gather.restore :as restore]
     [gather.common :as c]
-    [gather.exmo :as exmo]
-    [gather.binance :as binance]
   ))
 
 (defn market-inserter
@@ -17,7 +15,7 @@
   (fn put! [pair & args]
     (doseq [[tp rows] (apply hash-map args)]
       (assert (keyword? tp))
-      (storage/push-buf! (get buffers (list pair tp)) rows))
+      (sg/push-buf! (get buffers (list pair tp)) rows))
     ))
 
 (defn print-vec
@@ -25,15 +23,6 @@
   [lines]
   (dorun (map println lines)
   ))
-
-(def gather-map {
-  :exmo {
-    :ws exmo/gather-ws
-    :get-all-pairs exmo/get-all-pairs}
-  :binance {
-    :ws binance/gather-ws
-    :get-all-pairs binance/get-all-pairs}
-  })
 
 (defn raw-insert-loop!
   "Worker, that periodicaly inserts rows from raw buffers into Clickhouse"
@@ -47,29 +36,25 @@
       (recur))
   ))
 
+(defn candles-insert-loop!
+  [market candles pairs db-cfg get-candles]
+  (println candles)
+  (println pairs))
+
 (defn main
   "Entry point"
   [& [config-file-name]]
-  (let [
-      {db-cfg :clickhouse markets :markets} (config/load-config config-file-name)
-      buffers (storage/make-raw-buffers markets)
-    ]
-    (run! (partial apply storage/create-market-tables! db-cfg) markets)
-    (doseq [
-        [market {pairs :raw-pairs}] markets
-        :let [
-          funcs (market gather-map)
-          all-pairs ((:get-all-pairs funcs))
-          market-buf (market buffers)
-          market-name (c/capitalize-key market)
-        ]]
+  (let [{db-cfg :clickhouse markets :markets} (cfg/load-config config-file-name)]
+    (run! (partial apply sg/create-market-tables! db-cfg) markets)
+    (doseq [market markets]
       (c/forever-loop #(do
-        (println (str "\n" (new java.util.Date) " Starting " market-name " WS"))
+        (println (str "\n" (new java.util.Date) " Starting " (:name market) " WS"))
         ((:ws funcs) pairs (market-inserter market market-buf))
       ) :title (str market-name " WS"))
       ;(c/forever-loop #(do
       ;  (println (str "\n" (new java.util.Date) " Starting " market-name " REST"))
       ;) :title (str market-name " REST")
+      (candles-insert-loop! market candles all-pairs db-cfg (:get-candles funcs))
       )
     (c/try-loop (partial raw-insert-loop! buffers db-cfg) :title "Core" :delay 10000)
   ))

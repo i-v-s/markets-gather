@@ -9,6 +9,11 @@
     [aleph.http :as http]
   ))
 
+(def intervals-map {
+  :1m 60 :3m 180 :5m 300 :15m 900 :30m 1800 
+  :1h 3600 :2h 7200 :4h 14400 :6h (* 6 3600) :8h (* 8 3600) :12h (* 12 3600)
+  :1d 86400 :3d (* 3 86400) :1w (* 7 86400) :1M (* 31 86400)})
+
 (defn lower
   "Convert name to lowercase and '-' to '_'"
   [name]
@@ -43,6 +48,10 @@
       (clojure.string/join "&")
       (str url "?")
     )))
+
+(defn ts-to-long
+  [ts]
+  (if (nil? ts) nil (.getTime ts)))
 
 (defn http-get-json
   "Get JSON data with HTTP GET request"
