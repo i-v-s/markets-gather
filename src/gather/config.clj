@@ -54,7 +54,7 @@
         all-pairs
         (prepare-intervals market candles)
       ) nil)
-      :raw (sg/make-raw-data filtered-raw-pairs)
+      :raw (sg/make-raw-data (:name market) filtered-raw-pairs)
   )))
 
 (defn load-json

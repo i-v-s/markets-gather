@@ -75,8 +75,8 @@
 
 (defn get-table-name
   "Get table name for trades or depths"
-  [db market item type]
-  (str db "." (lower (name market)) "_" (lower item) "_" (type table-types)))
+  [market-name item type]
+  (str (lower market-name) "_" (lower item) "_" (type table-types)))
 
 (defn try-loop
   "Try to call function in loop"

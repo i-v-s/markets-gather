@@ -201,41 +201,33 @@
     (map transform-candle-rest)
   ))
 
+(def put! nil)
+
 (defrecord Binance [name intervals-map raw candles]
   sg/Market
   (get-all-pairs [this]
     (->> (info-rest-query)
-      c/http-get-json
-      w/keywordize-keys
-      :symbols
-      (filter #(= (:status %) "TRADING"))
-      (map #(str (:baseAsset %) "-" (:quoteAsset %)))
-    ))
-    (gather-ws-loop!
-      "Gather from Binance"
-      [{{pairs :pairs} :raw}]
-      (let [
-          ws @(http/websocket-client (str
-            "wss://stream.binance.com:9443/stream?streams="
-            (clojure.string/join "/" (concat
-              (map (partial get-stream :t) pairs)
-              (map (partial get-stream :d) pairs)
-            ))))
-          actions (put-map pairs put!)
-        ]
-        (println "Binance connected")
-        (s/put-all! ws [(ws-query :t pairs :d pairs)])
-        (put-recent-trades! pairs put!)
-        (put-current-depths! pairs put!)
-        (while true (let [
-            chunk (json/read-str @(s/take! ws)) ; null!
-            action (get actions (get chunk "stream"))
-          ]
-          (if action
-            (action (get chunk "data"))
-            (println "\nBinance: No action for: " chunk))
-        ))))
-  )
+         c/http-get-json
+         w/keywordize-keys
+         :symbols
+         (filter #(= (:status %) "TRADING"))
+         (map #(str (:baseAsset %) "-" (:quoteAsset %)))))
+  (gather-ws-loop! [{{pairs :pairs} :raw} verbose]
+    (let [ws @(http/websocket-client (str
+                                      "wss://stream.binance.com:9443/stream?streams="
+                                      (clojure.string/join "/" (concat
+                                                                (map (partial get-stream :t) pairs)
+                                                                (map (partial get-stream :d) pairs)))))
+          actions (put-map pairs put!)]
+      (println "Binance connected")
+      (s/put-all! ws [(ws-query :t pairs :d pairs)])
+      (put-recent-trades! pairs put!)
+      (put-current-depths! pairs put!)
+      (while true (let [chunk (json/read-str @(s/take! ws)) ; null!
+                        action (get actions (get chunk "stream"))]
+                    (if action
+                      (action (get chunk "data"))
+                      (println "\nBinance: No action for: " chunk)))))))
 
 (defn create
   "Create Binance instance"

@@ -26,37 +26,37 @@
 
 (defn raw-insert-loop!
   "Worker, that periodicaly inserts rows from raw buffers into Clickhouse"
-  [buffers {db-url :url db :db}]
+  [markets {db-url :url db :db}]
   (let [conn (ch/connect db-url)]
+    ()
     (println (str "\n" (new java.util.Date) ": Started Core"))
     (loop []
       (Thread/sleep 2000)
-      (storage/insert-from-raw-buffers! buffers conn db)
-      (storage/print-buffers buffers)
-      (recur))
-  ))
+      (sg/insert-from-raw-buffers! markets conn)
+      (sg/print-buffers markets)
+      (recur))))
 
 (defn candles-insert-loop!
-  [market candles pairs db-cfg get-candles]
-  (println candles)
-  (println pairs))
+  [market db-cfg]
+  ;(println market)
+  (println "Candles-insert-loop"))
 
 (defn main
   "Entry point"
   [& [config-file-name]]
   (let [{db-cfg :clickhouse markets :markets} (cfg/load-config config-file-name)]
-    (run! (partial apply sg/create-market-tables! db-cfg) markets)
+    (run! (partial sg/create-market-tables! db-cfg) markets)
     (doseq [market markets]
       (c/forever-loop #(do
         (println (str "\n" (new java.util.Date) " Starting " (:name market) " WS"))
-        ((:ws funcs) pairs (market-inserter market market-buf))
-      ) :title (str market-name " WS"))
+        (sg/gather-ws-loop! market :info))
+      :title (str (:name market) " WS"))
       ;(c/forever-loop #(do
       ;  (println (str "\n" (new java.util.Date) " Starting " market-name " REST"))
       ;) :title (str market-name " REST")
-      (candles-insert-loop! market candles all-pairs db-cfg (:get-candles funcs))
+      (candles-insert-loop! market db-cfg)
       )
-    (c/try-loop (partial raw-insert-loop! buffers db-cfg) :title "Core" :delay 10000)
+    (c/try-loop (partial raw-insert-loop! markets db-cfg) :title "Core" :delay 10000)
   ))
 
 (defn -main

@@ -63,9 +63,9 @@
 (defn create-market-tables-queries
   "Get queries for market tables creation"
   [db market pairs settings]
-  (concat [(str "CREATE DATABASE IF NOT EXISTS " db)]
+  (concat [(str "CREATE DATABASE IF NOT EXISTS " db) (str "USE " db)]
     (for [pair pairs [type rec] table-types]
-      (apply ch/create-table-query (c/get-table-name db market pair type) (conj rec :settings settings)))))
+      (apply ch/create-table-query (c/get-table-name market pair type) (conj rec :settings settings)))))
 
 (defn create-market-tables!
   "Create market tables"
@@ -79,32 +79,52 @@
    ))
 
 (defn market-insert-query
-  [db market pair type]
+  [market pair type]
   (ch/insert-query
-    (c/get-table-name db market pair type)
-    (first (type table-types))))
+   (c/get-table-name market pair type)
+   (first (type table-types))))
+
+(defn market-insert-query
+  [table type]
+  (ch/insert-query
+   table
+   (first (type table-types))))
 
 
 ; Memory storage functions
+
+(defprotocol Writable
+  "A protocol that abstracts writable object"
+  (push! [this rows] "Write rows to object")
+  (writed-count [this] "Returns writed count"))
+
+(deftype WriteCache [buffer table]
+  Writable
+  (push! [this rows]
+    (swap! (.buffer this)
+           (fn [[c v]]
+             (list
+              (+ c (count rows))
+              (into v rows)))))
+  (writed-count [this]
+    (-> (.buffer this) deref first)))
 
 (defn make-buffer
   "Create empty memory buffer in form '(count, rows)"
   [] (atom (list 0 [])))
 
 (defn make-raw-buffers
-  "Prepare empty write buffers in form {[\"name\" :tp] buffer}. \"name\" may be pair or candle interval"
-  [raw-pairs]
-  (into {} (for [pair raw-pairs tp [:t :s :b]]
-    [(list pair tp) (make-buffer)])))
+  "Prepare empty write buffers in form {\"name\" [buffer table]}. \"name\" may be pair or candle interval"
+  [market-name raw-pairs tp]
+  (into {} (for [pair raw-pairs]
+             [pair (WriteCache. (make-buffer)
+                                (c/get-table-name market-name pair tp))])))
 
-(defn push-buf!
-  "Push rows in atom with form '(count, rows)"
-  [buf rows]
-  (swap! buf (fn [[c v]]
-    (list
-      (+ c (count rows))
-      (into v rows)
-    ))))
+(defn push-raw! [bufs pair rows]
+  (let [{item pair} bufs]
+    (if item
+      (push! item rows)
+      (throw (Exception. (str "(push-raw!): Unknown pair " pair))))))
 
 (defn pop-buf!
   "Pop rows only from atom with form '(count, rows)"
@@ -112,30 +132,28 @@
 
 (defn insert-from-raw-buffers!
   "Try to write data from raw buffers into Clickhouse and then clear them"
-  [buffers conn db]
-  (doseq [
-      [market pairs] buffers
-      [[pair tp] buf] pairs
-      :let [rows (pop-buf! buf)]
-      :when (not-empty rows)
-    ]
+  [markets conn]
+  (doseq [{raw :raw market-name :name} markets
+          tp [:t :b :s]
+          [pair [buf table]] (tp raw)
+          :let [rows (pop-buf! buf)]
+          :when (not-empty rows)]
     (try
-      (ch/insert-many! conn (market-insert-query db market pair tp) rows)
+      (ch/insert-many! conn (market-insert-query table tp) rows)
       (catch Exception e
-        (println "\nException on insert" market pair tp "- repushing...")
-        (swap! buf (fn [[c v]](list c (into rows v))))
-        (throw e))
-  )))
+        (println "\nException on insert" market-name pair tp "- repushing...")
+        (swap! buf (fn [[c v]] (list c (into rows v))))
+        (throw e)))))
 
 (defn print-buffers
   "Prints statistics on buffers"
-  [buffers]
+  [markets]
   (do
     (->>
-      (for [[market pairs] buffers]
-        (str (c/capitalize-key market) " " (c/comma-join
-          (for [[k v] (c/map-sum pairs :k second :v (comp first deref))]
-                          (str v (name k))))))
+      (for [{market-name :name raw :raw} markets]
+        (str market-name " " (c/comma-join
+          (for [tp [:t :b :s]]
+                          (str (sum (comp deref first ) (map (tp raw))) (name tp))))))
      c/comma-join
      (str "\r")
      print) (flush)))
@@ -143,13 +161,25 @@
 (defprotocol Market
   "A protocol that abstracts exchange interactions"
   (get-all-pairs [this] "Return all pairs for current market")
-  (gather-ws-loop! [this] "Gather raw data via websockets")
+  (gather-ws-loop! [this verbose] "Gather raw data via websockets")
 )
 
-(defrecord RawData [pairs buffers])
+(defrecord RawData [pairs t b s])
 (defrecord CandlesData [pairs intervals])
 
 (defn make-raw-data
   "Prepare empty write buffers in form {market {[\"name\" :tp] buffer}}. \"name\" may be pair or candle interval"
-  [raw-pairs]
-  (RawData. raw-pairs (make-raw-buffers raw-pairs)))
+  [market-name raw-pairs]
+  (RawData. raw-pairs 
+            (make-raw-buffers market-name raw-pairs :t)
+            (make-raw-buffers market-name raw-pairs :b)
+            (make-raw-buffers market-name raw-pairs :s)))
+
+;(defn market-inserter
+;  "Return function, that inserts rows to Clickhouse"
+;  [market buffers]
+;  (fn put! [pair & args]
+;    (doseq [[tp rows] (apply hash-map args)]
+;      (assert (keyword? tp))
+;      (sg/push-buf! (get buffers (list pair tp)) rows))))
+
