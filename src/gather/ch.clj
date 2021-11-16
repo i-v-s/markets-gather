@@ -17,8 +17,9 @@
   [url]
   (.createStatement (DriverManager/getConnection url)))
 
-(defn exec-query!
-  "Execute SQL query"
+(defmulti exec! "Execute SQL query" (fn [c _] (class c)))
+
+(defmethod exec! com.github.housepower.jdbc.statement.ClickHouseStatement
   [stmt query]
   (try
     (.executeQuery stmt query)
@@ -27,6 +28,14 @@
       (println query)
       (throw e)
   )))
+
+(defmethod exec! com.github.housepower.jdbc.ClickHouseConnection [c query]
+  (exec! (.createStatement c) query))
+
+(defn use!
+  "Execute USE statement"
+  [c db]
+  (exec! c (str "USE " db)))
 
 (defn get-metadata
   [result-set]
@@ -54,12 +63,12 @@
 
 (defn fetch-tables
   [st db]
-  (exec-query! st (str "USE " db))
-  (->> "SHOW TABLES" (exec-query! st) fetch-all (map :name)))
+  (exec! st (str "USE " db))
+  (->> "SHOW TABLES" (exec! st) fetch-all (map :name)))
 
 (defn show-table
   [st table] (->> table
-    (str "SHOW CREATE TABLE ") (exec-query! st) fetch-all first :statement))
+    (str "SHOW CREATE TABLE ") (exec! st) fetch-all first :statement))
 
 (defn db-table-key
   [item] (str (:database item) "." (:table item)))
@@ -74,7 +83,7 @@
       (if db (str "WHERE database = '" db "' ") "")
       "GROUP BY partition, database, table "
       "ORDER BY database, table, partition")
-    (exec-query! st)
+    (exec! st)
     fetch-all
     (c/vec-to-map-of-vec (if db :table db-table-key) :partition)))
 
@@ -83,7 +92,7 @@
   [conn queries]
   (dorun
     (map
-      (partial exec-query! (.createStatement conn))
+      (partial exec! (.createStatement conn))
       queries)))
 
 (defmulti set-pst-item class)
@@ -148,6 +157,6 @@
 (defn copy-table
   [st from to]
   (println "Creating table" to)
-  (exec-query! st (str "CREATE TABLE IF NOT EXISTS" to " AS " from))
+  (exec! st (str "CREATE TABLE IF NOT EXISTS" to " AS " from))
   (println "Coping from" from "to" to)
-  (exec-query! st (str "INSERT INTO " to " SELECT * FROM " from)))
+  (exec! st (str "INSERT INTO " to " SELECT * FROM " from)))

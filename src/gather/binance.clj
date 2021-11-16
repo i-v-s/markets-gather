@@ -107,12 +107,13 @@
 
 (defn transform-depth-level
   "Transform Binance depth record to Clickhouse row"
-  [time] (let [ts (new java.sql.Timestamp time)]
-    (fn [[p q]] (let [price (Double/parseDouble p)] [
-      ts
-      price
-      (-> q Float/parseFloat (* price) float)
-      ]))))
+  [time]
+  (let [ts (new java.sql.Timestamp time)]
+    (fn [[p q]]
+      (let [price (Double/parseDouble p)]
+        [ts
+         price
+         (-> q Float/parseFloat (* price) float)]))))
 
 (defn transform-depth-ws
   "Transform Binance depth records from websocket to Clickhouse rows"
@@ -182,16 +183,6 @@
       ;print-pass
       (apply put! pair)
       )))
-
-(defn get-all-pairs
-  []
-  (->> (info-rest-query)
-    c/http-get-json
-    w/keywordize-keys
-    :symbols
-    (filter #(= (:status %) "TRADING"))
-    (map #(str (:baseAsset %) "-" (:quoteAsset %)))
-  ))
 
 (defn get-candles
   "Get candles by REST"

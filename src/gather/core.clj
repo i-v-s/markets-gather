@@ -9,26 +9,11 @@
     [gather.common :as c]
   ))
 
-(defn market-inserter
-  "Return function, that inserts rows to Clickhouse"
-  [market buffers]
-  (fn put! [pair & args]
-    (doseq [[tp rows] (apply hash-map args)]
-      (assert (keyword? tp))
-      (sg/push-buf! (get buffers (list pair tp)) rows))
-    ))
-
-(defn print-vec
-  "Prints vector of strings"
-  [lines]
-  (dorun (map println lines)
-  ))
-
 (defn raw-insert-loop!
   "Worker, that periodicaly inserts rows from raw buffers into Clickhouse"
   [markets {db-url :url db :db}]
   (let [conn (ch/connect db-url)]
-    ()
+    (ch/use! conn db)
     (println (str "\n" (new java.util.Date) ": Started Core"))
     (loop []
       (Thread/sleep 2000)

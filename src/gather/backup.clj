@@ -74,7 +74,7 @@
       (clean-dir meta-dir)
       (doseq [[tab parts] f-tabs part (filter p-test parts)]
         (println "Freezing" tab part)
-        (ch/exec-query! st (str "ALTER TABLE fx." tab " FREEZE PARTITION " part))
+        (ch/exec! st (str "ALTER TABLE fx." tab " FREEZE PARTITION " part))
         (spit (str meta-dir "/" tab ".sql") (ch/show-table st (str "fx." tab)))
         )
       (println "Pack to" result)

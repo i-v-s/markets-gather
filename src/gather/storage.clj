@@ -93,21 +93,31 @@
 
 ; Memory storage functions
 
-(defprotocol Writable
+(defprotocol Accumulator
   "A protocol that abstracts writable object"
-  (push! [this rows] "Write rows to object")
-  (writed-count [this] "Returns writed count"))
+  (push! [this rows] "Write rows to back")
+  (repush! [this rows] "Write rows to start, without change writed count")
+  (writed-count [this] "Returns writed count")
+  (pop-all! [this] "Pop rows only from atom with form '(count, rows)"))
 
 (deftype WriteCache [buffer table]
-  Writable
+  Accumulator
   (push! [this rows]
     (swap! (.buffer this)
            (fn [[c v]]
              (list
               (+ c (count rows))
               (into v rows)))))
+  (repush! [this rows]
+    (swap! (.buffer this)
+           (fn [[c v]]
+             (list
+              c
+              (into rows v)))))
   (writed-count [this]
-    (-> (.buffer this) deref first)))
+    (-> (.buffer this) deref first))
+  (pop-all! [this]
+    (-> (swap-vals! (.buffer this) #(list (first %) [])) first second)))
 
 (defn make-buffer
   "Create empty memory buffer in form '(count, rows)"
@@ -126,54 +136,62 @@
       (push! item rows)
       (throw (Exception. (str "(push-raw!): Unknown pair " pair))))))
 
-(defn pop-buf!
-  "Pop rows only from atom with form '(count, rows)"
-  [item] (-> (swap-vals! item #(list (first %) [])) first second))
-
 (defn insert-from-raw-buffers!
   "Try to write data from raw buffers into Clickhouse and then clear them"
   [markets conn]
   (doseq [{raw :raw market-name :name} markets
           tp [:t :b :s]
-          [pair [buf table]] (tp raw)
-          :let [rows (pop-buf! buf)]
+          [pair cache] (tp raw)
+          :let [rows (pop-all! cache)]
           :when (not-empty rows)]
     (try
-      (ch/insert-many! conn (market-insert-query table tp) rows)
+      (ch/insert-many! conn (market-insert-query (.table cache) tp) rows)
       (catch Exception e
         (println "\nException on insert" market-name pair tp "- repushing...")
-        (swap! buf (fn [[c v]] (list c (into rows v))))
+        (repush! cache rows)
         (throw e)))))
+
+(defprotocol Considerable
+  (stats [this] "Return stats string of object"))
+
+(defrecord RawData [pairs t b s]
+  Considerable
+  (stats [this]
+    (c/comma-join
+     (for [tp [:t :b :s]]
+       (str (->> this
+                 tp
+                 (map (comp writed-count second))
+                 (reduce +))
+            (name tp))))))
+
+(defrecord CandlesData [pairs intervals])
+
+(defn make-raw-data
+  "Prepare empty write buffers in form {market {[\"name\" :tp] buffer}}. \"name\" may be pair or candle interval"
+  [market-name raw-pairs]
+  (RawData. raw-pairs
+            (make-raw-buffers market-name raw-pairs :t)
+            (make-raw-buffers market-name raw-pairs :b)
+            (make-raw-buffers market-name raw-pairs :s)))
 
 (defn print-buffers
   "Prints statistics on buffers"
   [markets]
   (do
     (->>
-      (for [{market-name :name raw :raw} markets]
-        (str market-name " " (c/comma-join
-          (for [tp [:t :b :s]]
-                          (str (sum (comp deref first ) (map (tp raw))) (name tp))))))
+     (for [{market-name :name raw :raw} markets]
+       (str market-name " " (stats raw)))
      c/comma-join
      (str "\r")
-     print) (flush)))
+     print)
+    (flush)))
 
 (defprotocol Market
   "A protocol that abstracts exchange interactions"
   (get-all-pairs [this] "Return all pairs for current market")
   (gather-ws-loop! [this verbose] "Gather raw data via websockets")
 )
-
-(defrecord RawData [pairs t b s])
-(defrecord CandlesData [pairs intervals])
-
-(defn make-raw-data
-  "Prepare empty write buffers in form {market {[\"name\" :tp] buffer}}. \"name\" may be pair or candle interval"
-  [market-name raw-pairs]
-  (RawData. raw-pairs 
-            (make-raw-buffers market-name raw-pairs :t)
-            (make-raw-buffers market-name raw-pairs :b)
-            (make-raw-buffers market-name raw-pairs :s)))
 
 ;(defn market-inserter
 ;  "Return function, that inserts rows to Clickhouse"

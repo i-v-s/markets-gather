@@ -15,9 +15,16 @@
   [(get r "trade_id")
    (new java.sql.Timestamp (* 1000 (get r "date")))
    (if (= "buy" (get r "type")) 1 0)
-   (Float/parseFloat (get r "price"))
+   (Double/parseDouble (get r "price"))
    (Float/parseFloat (get r "quantity"))
    (Float/parseFloat (get r "amount"))])  
+
+(defn transform-ws-depth
+  "Transform Exmo order book position to Clickhouse row"
+  [ts [price quantity amount]]
+  [ts
+   (Double/parseDouble price)
+   (Float/parseFloat amount)])
 
 (defn pair-topic
   "Convert pair to topic"
@@ -31,10 +38,11 @@
 (defn ws-query
   "Prepare Exmo websocket request"
   [pairs]
-  (json/write-str {}
-                  :id 1
-                  :method "subscribe"
-                  :topics (for [pair pairs topic ["trades" "order_book_updates"]] (pair-topic topic pair))))
+  (json/write-str {:id 1
+                   :method "subscribe"
+                   :topics (for [pair pairs
+                                 topic ["trades" "order_book_updates"]]
+                             (pair-topic topic pair))}))
   
 (defn print-msg
   [ts & args]
@@ -44,11 +52,17 @@
   (->> "https://api.exmo.com/v1.1/currency"
        c/http-get-json
        (map dexmo-pair)))
-    
+
 (defn parse-topic
   [topic]
   (let [items (re-find #"^spot/(\w+):(\w+)$" topic)]
     (if (= (count items) 3) (rest items) nil)))
+
+(defn push-ws-depth! [{sell :s buy :b} ts pair {ask "ask" bid "bid"}]
+  (let [td (partial transform-ws-depth (new java.sql.Timestamp ts))
+        dp (dexmo-pair pair)]
+    (sg/push-raw! sell dp (map td ask))
+    (sg/push-raw! buy dp (map td bid))))
 
 (defrecord Exmo [name intervals-map raw candles]
   sg/Market
@@ -57,8 +71,9 @@
          c/http-get-json
          keys
          (map dexmo-pair)))
-  (gather-ws-loop! [{{pairs :pairs trades :trades} :raw} verbose]
-    (let [ws @(http/websocket-client "wss://ws-api.exmo.com:443/v1/public")]
+  (gather-ws-loop! [{raw :raw} verbose]
+    (let [{pairs :pairs trades :t} raw
+          ws @(http/websocket-client "wss://ws-api.exmo.com:443/v1/public")]
       (s/put-all! ws [(ws-query pairs)])
       (while true
         (let [chunk (json/read-str @(s/take! ws)) {event "event"} chunk] ; null!
@@ -71,12 +86,17 @@
             "subscribed" (if (= verbose :debug)
                            (let [{ts "ts" topic "topic"} chunk]
                              (print-msg ts "Exmo WS subscribed topic: " topic)))
+            "snapshot" (let [{ts "ts" topic "topic" data "data"} chunk
+                             [topic-name pair] (parse-topic topic)]
+                         (case topic-name
+                           "order_book_updates" (push-ws-depth! raw ts pair data)
+                           (print-msg ts "Exmo WS unknown snapshot topic: " topic)))
             "update" (let [{ts "ts" topic "topic" data "data"} chunk
                            [topic-name pair] (parse-topic topic)]
                        (case topic-name
-                         "spot/trades" (sg/push-raw! trades (dexmo-pair pair) (map transform-trade data))
-                         ;"spot/order_book_updates" ()
-                         (print-msg ts "Exmo WS unknown topic: " topic)))
+                         "trades" (sg/push-raw! trades (dexmo-pair pair) (map transform-trade data))
+                         "order_book_updates" (push-ws-depth! raw ts pair data)
+                         (print-msg ts "Exmo WS unknown update topic: " topic)))
             (println "Exmo WS unknown event: " event)))))))
 
 (defn create
