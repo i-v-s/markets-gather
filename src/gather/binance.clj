@@ -150,16 +150,16 @@
     (fn [data] (apply put! pair (tf data)))
   ]) (into {})))
 
-(defn put-recent-trades!
+(defn push-recent-trades!
   "Get recent trades from REST and put them by callback"
-  [pairs put!]
+  [trades-cache pairs]
   (doseq [pair pairs]
     (->> @(http/get (trades-rest-query pair))
       :body
       bs/to-string
       json/read-str
       (map transform-trade)
-      (put! pair :t)
+      (sg/push-raw! trades-cache pair)
       )))
 
 (defn transform-depths-rest [d]
@@ -203,8 +203,9 @@
          :symbols
          (filter #(= (:status %) "TRADING"))
          (map #(str (:baseAsset %) "-" (:quoteAsset %)))))
-  (gather-ws-loop! [{{pairs :pairs} :raw} verbose]
-    (let [ws @(http/websocket-client (str
+  (gather-ws-loop! [{raw :raw} verbose]
+    (let [{pairs :pairs trades :t} raw
+          ws @(http/websocket-client (str
                                       "wss://stream.binance.com:9443/stream?streams="
                                       (clojure.string/join "/" (concat
                                                                 (map (partial get-stream :t) pairs)
@@ -212,7 +213,7 @@
           actions (put-map pairs put!)]
       (println "Binance connected")
       (s/put-all! ws [(ws-query :t pairs :d pairs)])
-      (put-recent-trades! pairs put!)
+      (push-recent-trades! trades pairs)
       (put-current-depths! pairs put!)
       (while true (let [chunk (json/read-str @(s/take! ws)) ; null!
                         action (get actions (get chunk "stream"))]

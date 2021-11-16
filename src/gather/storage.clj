@@ -192,12 +192,3 @@
   (get-all-pairs [this] "Return all pairs for current market")
   (gather-ws-loop! [this verbose] "Gather raw data via websockets")
 )
-
-;(defn market-inserter
-;  "Return function, that inserts rows to Clickhouse"
-;  [market buffers]
-;  (fn put! [pair & args]
-;    (doseq [[tp rows] (apply hash-map args)]
-;      (assert (keyword? tp))
-;      (sg/push-buf! (get buffers (list pair tp)) rows))))
-
