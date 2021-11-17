@@ -53,6 +53,10 @@
   [ts]
   (if (nil? ts) nil (.getTime ts)))
 
+(defn ts-str
+  [ts & args]
+  (apply str (new java.sql.Timestamp ts) args))
+
 (defn http-get-json
   "Get JSON data with HTTP GET request"
   [url & params]
@@ -129,13 +133,6 @@
       (let [kr (key item)]
         (assoc coll kr (conj (get coll kr []) (value item)))))
     {} coll))
-
-(defn filter-keys
-  [f coll]
-  (reduce-kv
-    (fn [coll k v]
-      (if (f k) (assoc coll k v) coll)
-      {} coll)))
 
 (defn to-uint [s] (Integer/parseUnsignedInt s))
 
