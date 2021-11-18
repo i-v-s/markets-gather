@@ -28,12 +28,11 @@
   [items]
   (clojure.string/join ", " items))
 
-(def table-types {
-  :t "trades"
-  :b "buy"
-  :s "sell"
-  :p "prices"
-  })
+(def table-types {:t "trades"
+                  :b "buy"
+                  :s "sell"
+                  :p "prices"
+                  :c "candles"})
 
 (defn url-encode-params
   "Encode params in url"

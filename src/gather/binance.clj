@@ -5,7 +5,6 @@
     [clojure.data.json :as json]
     [manifold.stream :as s]
     [aleph.http :as http]
-    [byte-streams :as bs]
     [gather.common :as c]
     [gather.storage :as sg]
   ))
@@ -236,14 +235,14 @@
                         pair (pairs-map pair-id)]
                     (if (and pair topic)
                       (try
-                      (case topic
-                        "trade" (sg/push-raw! trades pair [(transform-trade-ws data)])
-                        "depth" (push-ws-depth!
-                                 raw pair
-                                 (if @depth-snapshot
-                                   (mix-depth pair depth-snapshot data)
-                                   data))
-                        (println "\nBinance: unknown stream topic" stream))
+                        (case topic
+                          "trade" (sg/push-raw! trades pair [(transform-trade-ws data)])
+                          "depth" (push-ws-depth!
+                                   raw pair
+                                   (if @depth-snapshot
+                                     (mix-depth pair depth-snapshot data)
+                                     data))
+                          (println "\nBinance: unknown stream topic" stream))
                         (catch Exception e
                           (println "\nBinance exception during chunk processing. Stream" stream "data:")
                           (println data)

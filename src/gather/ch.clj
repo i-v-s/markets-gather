@@ -122,6 +122,16 @@
       (add-batch! p-st item))
     (.executeBatch p-st)))
 
+(defn conj-fields
+  "Add field(s) to table record"
+  [rec & fields]
+  (apply vector
+   (->> fields
+        (apply concat (first rec))
+        (apply concat)
+        (apply array-map))
+   (rest rec)))
+
 (defn column-desc-query
   [[key desc]]
   (str (name key) " " desc))
@@ -132,7 +142,6 @@
     :keys [order-by engine partition-by settings]
     :or {
       engine "MergeTree()"
-      partition-by "toYYYYMM(time)"
       settings []
     }
     }]
@@ -149,7 +158,7 @@
   [table rec]
   (str
     "INSERT INTO " table " ("
-    (c/comma-join (for [[key desc] rec] (name key)))
+    (c/comma-join (for [[key _] rec] (name key)))
     ") VALUES ("
     (c/comma-join (for [a rec] "?"))
     ")"))

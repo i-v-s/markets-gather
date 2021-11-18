@@ -39,6 +39,12 @@
   :order-by ["time"]
   ])
 
+(def candle-rec [(array-map
+                 :time "DateTime"
+                 )
+                :engine "ReplacingMergeTree()"
+                :order-by ["time"]])
+
 (def candle-pair-fields (array-map
   :open "Float64 CODEC(Gorilla)"
   :high "Float64 CODEC(Gorilla)"
@@ -51,7 +57,7 @@
   :buy-q-volume "Float32"
 ))
 
-(def table-types {
+(def raw-table-types {
   :t trade-rec
   :b depth-rec
   :s depth-rec
@@ -60,21 +66,48 @@
 
 ; Clickhouse storage functions
 
-(defn create-market-tables-queries
-  "Get queries for market tables creation"
+(defn construct-candle-rec
+  [pairs]
+  (ch/conj-fields
+   candle-rec
+   (for [pair pairs
+         [field decl] candle-pair-fields]
+     [(c/lower (str pair "_" (name field))) decl])))
+
+(defn construct-candle-recs
+  [candles pairs & {:keys [settings] :or {settings []}}]
+  (into {}
+        (for [candle candles]
+          [candle
+           (into []
+                 (concat
+                  (construct-candle-rec pairs)
+                  (if (< (c/intervals-map candle) (c/intervals-map :1d))
+                    [:partition-by "toYear(time)"] [])
+                  settings))])))
+
+(defn create-raw-tables-queries
+  "Get queries for raw market data tables creation"
   [db market pairs settings]
   (concat [(str "CREATE DATABASE IF NOT EXISTS " db) (str "USE " db)]
-    (for [pair pairs [type rec] table-types]
+    (for [pair pairs [type rec] raw-table-types]
       (apply ch/create-table-query (c/get-table-name market pair type) (conj rec :settings settings)))))
 
-(defn create-market-tables!
+(defn create-candle-tables-queries
+  "Get queries for candle data tables creation"
+  [market candle-recs]
+  (for [[candle rec] candle-recs]
+    (apply ch/create-table-query
+           (c/get-table-name market (name candle) :c)
+           rec)))
+
+(defn create-raw-tables!
   "Create market tables"
-  [{db :db url :url policy :storage-policy} {market :name {pairs :pairs} :raw}]
-  ;(println
+  [{db :db url :url policy :storage-policy} {market :name {raw-pairs :pairs} :raw}]
   (ch/exec-vec!
     (ch/connect url)
-    (create-market-tables-queries 
-      db market pairs
+    (create-raw-tables-queries
+      db market raw-pairs
       (if policy [(str "storage_policy = '" policy "'")] []))
    ))
 
@@ -82,13 +115,13 @@
   [market pair type]
   (ch/insert-query
    (c/get-table-name market pair type)
-   (first (type table-types))))
+   (first (type raw-table-types))))
 
 (defn market-insert-query
   [table type]
   (ch/insert-query
    table
-   (first (type table-types))))
+   (first (type raw-table-types))))
 
 
 ; Memory storage functions

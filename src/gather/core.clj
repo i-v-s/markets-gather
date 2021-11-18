@@ -30,7 +30,7 @@
   "Entry point"
   [& [config-file-name]]
   (let [{db-cfg :clickhouse markets :markets} (cfg/load-config config-file-name)]
-    (run! (partial sg/create-market-tables! db-cfg) markets)
+    (run! (partial sg/create-raw-tables! db-cfg) markets)
     (doseq [market markets]
       (c/forever-loop #(do
         (println (str "\n" (new java.util.Date) " Starting " (:name market) " WS"))
