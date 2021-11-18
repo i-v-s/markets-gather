@@ -118,7 +118,7 @@
 
 (defn transform-candle-rest
   "Transform candle record to Clickhouse row"
-  [[t, o, h, l, c, v, ct, qv, nt, bv, bqv]]
+  [[t, o, h, l, c, v, _, qv, nt, bv, bqv]]
   [
     (new java.sql.Timestamp t)
     (Double/parseDouble o)
@@ -208,14 +208,14 @@
 
 (defrecord Binance [name intervals-map raw candles]
   sg/Market
-  (get-all-pairs [this]
+  (get-all-pairs [_]
     (->> (info-rest-query)
          c/http-get-json
          w/keywordize-keys
          :symbols
          (filter #(= (:status %) "TRADING"))
          (map #(str (:baseAsset %) "-" (:quoteAsset %)))))
-  (gather-ws-loop! [{raw :raw} verbose]
+  (gather-ws-loop! [{raw :raw} _]
     (let [{pairs :pairs trades :t} raw
           pairs-map (zipmap (map lower-pair pairs) pairs)
           depth-snapshot (atom nil)

@@ -95,11 +95,23 @@
 
 (defn create-candle-tables-queries
   "Get queries for candle data tables creation"
-  [market candle-recs]
+  [market-name candle-recs]
   (for [[candle rec] candle-recs]
     (apply ch/create-table-query
-           (c/get-table-name market (name candle) :c)
+           (c/get-table-name market-name (name candle) :c)
            rec)))
+
+(defn ensure-candle-tables!
+  "Create candle tables if absent and create absent cols"
+  [conn market-name exists-tables candle-recs]
+  (for [[candle rec] candle-recs
+        :let [table-name (c/get-table-name market-name (name candle) :c)]]
+    (if (contains? exists-tables table-name)
+      ()
+      (ch/exec! conn
+                (apply ch/create-table-query
+                       (c/get-table-name market-name (name candle) :c)
+                       rec)))))
 
 (defn create-raw-tables!
   "Create market tables"
@@ -211,14 +223,13 @@
 (defn print-buffers
   "Prints statistics on buffers"
   [markets]
-  (do
-    (->>
-     (for [{market-name :name raw :raw} markets]
-       (str market-name " " (stats raw)))
-     c/comma-join
-     (str "\r")
-     print)
-    (flush)))
+  (->>
+   (for [{market-name :name raw :raw} markets]
+     (str market-name " " (stats raw)))
+   c/comma-join
+   (str "\r")
+   print)
+  (flush))
 
 (defprotocol Market
   "A protocol that abstracts exchange interactions"

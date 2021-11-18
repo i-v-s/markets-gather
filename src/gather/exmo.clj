@@ -21,7 +21,7 @@
 
 (defn transform-ws-depth
   "Transform Exmo order book position to Clickhouse row"
-  [ts [price quantity amount]]
+  [ts [price _ amount]]
   [ts
    (Double/parseDouble price)
    (Float/parseFloat amount)])
@@ -66,7 +66,7 @@
 
 (defrecord Exmo [name intervals-map raw candles]
   sg/Market
-  (get-all-pairs [this]
+  (get-all-pairs [_]
     (->> "https://api.exmo.com/v1.1/pair_settings"
          c/http-get-json
          keys
@@ -77,13 +77,12 @@
       (s/put-all! ws [(ws-query pairs)])
       (while true
         (let [chunk (json/read-str @(s/take! ws)) {event "event"} chunk] ; null!
-        ;(println "CHUNK: " chunk " type: " (type chunk))
           (case event
             "info" (let [{ts "ts" code "code" message "message" sid "session_id"} chunk]
                      (print-msg ts "Exmo WS: " message "; session " sid "; code " code))
             "error" (let [{ts "ts" code "code" message "message"} chunk]
                       (print-msg ts "Exmo WS error: " message "; code " code))
-            "subscribed" (if (= verbose :debug)
+            "subscribed" (when (= verbose :debug)
                            (let [{ts "ts" topic "topic"} chunk]
                              (print-msg ts "Exmo WS subscribed topic: " topic)))
             "snapshot" (let [{ts "ts" topic "topic" data "data"} chunk

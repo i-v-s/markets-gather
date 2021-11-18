@@ -7,7 +7,7 @@
   "Start with params"
   [db-url args]
   (let [
-      st (ch/connect-st db-url)
+      st (ch/connect-st db-url :db "fx")
       tabs (ch/fetch-tables st)
       f-tabs (vec (distinct (mapcat
         (fn [arg] (filter (c/wc-test arg) tabs))

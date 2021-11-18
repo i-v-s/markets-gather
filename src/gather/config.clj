@@ -24,9 +24,9 @@
   ))
 
 (defn filter-exists
-  [possible message coll]
-  (let [{bad false good true} (group-by (partial contains? possible) coll)]
-  (if (not-empty bad) (println (str message ":") bad))
+  [possible message items]
+  (let [[good bad] (c/group-by-contains possible items)]
+  (when (not-empty bad) (println (str message ":") bad))
   good))
 
 (defn prepare-intervals

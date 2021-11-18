@@ -48,6 +48,12 @@
       (str url "?")
     )))
 
+(defn group-by-contains
+  [possible values]
+  (let [{not-exists false exists true}
+        (group-by (partial contains? possible) values)]
+    [exists not-exists]))
+
 (defn ts-to-long
   [ts]
   (if (nil? ts) nil (.getTime ts)))
@@ -177,7 +183,5 @@
    ;; A boolean option defaulting to nil
   :help ["-h" "--help"]
   })
-
-(defn select-options [&keys] (select-values cli-options keys))
 
 (defn parse-options [args & keys] (parse-opts args (select-values cli-options keys)))

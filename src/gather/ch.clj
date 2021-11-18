@@ -1,23 +1,31 @@
 (ns gather.ch
-  (:require [hugsql.core :as hugsql]
-            [hikari-cp.core :refer [close-datasource make-datasource]]
-            [clojure.java.jdbc :as jdbc]
-            [hugsql.adapter.clickhouse-native-jdbc :as clickhouse]
-            [gather.common :as c]))
+  (:require     [clojure.string :as str]
+                [hugsql.core :as hugsql]
+                [hikari-cp.core :refer [close-datasource make-datasource]]
+                [clojure.java.jdbc :as jdbc]
+                [hugsql.adapter.clickhouse-native-jdbc :as clickhouse]
+                [gather.common :as c]))
 
 (import java.sql.DriverManager)
 
+(defmulti exec! "Execute SQL query" (fn [c _] (class c)))
+
+(defn use!
+  "Execute USE statement"
+  [c db]
+  (exec! c (str "USE " db)))
+
 (defn connect
   "Connect to Clickhouse"
-  [url]
-  (DriverManager/getConnection url))
+  [url & {:keys [db]}]
+  (let [c (DriverManager/getConnection url)]
+    (when db (use! c db))
+    c))
 
 (defn connect-st
   "Connect to Clickhouse"
-  [url]
-  (.createStatement (DriverManager/getConnection url)))
-
-(defmulti exec! "Execute SQL query" (fn [c _] (class c)))
+  [url & args]
+  (.createStatement (apply connect url args)))
 
 (defmethod exec! com.github.housepower.jdbc.statement.ClickHouseStatement
   [stmt query]
@@ -31,11 +39,6 @@
 
 (defmethod exec! com.github.housepower.jdbc.ClickHouseConnection [c query]
   (exec! (.createStatement c) query))
-
-(defn use!
-  "Execute USE statement"
-  [c db]
-  (exec! c (str "USE " db)))
 
 (defn get-metadata
   [result-set]
@@ -59,16 +62,29 @@
   "Fetch all rows from result-set"
   [result-set]
   (let [md (get-metadata result-set)]
-    (for [i (range) :while (.next result-set)] (fetch-row result-set md))))
+    (for [_ (range) :while (.next result-set)] (fetch-row result-set md))))
 
 (defn fetch-tables
-  [st db]
-  (exec! st (str "USE " db))
-  (->> "SHOW TABLES" (exec! st) fetch-all (map :name)))
+  "Fetch all table names from current DB"
+  [c]
+  (->> "SHOW TABLES" (exec! c) fetch-all (map :name)))
 
-(defn show-table
-  [st table] (->> table
-    (str "SHOW CREATE TABLE ") (exec! st) fetch-all first :statement))
+(defn descr-to-rec
+  [{name :name type :type def-expr :default_expression codec :codec_expression}]
+  [(keyword name)
+   (->> [type
+         def-expr
+         (if (not-empty codec)
+           (str "CODEC(" codec ")")
+           nil)]
+        (filter not-empty)
+    (str/join " " ))])
+
+(defn describe-table [c table]
+    (->> table (str "DESCRIBE TABLE ") (exec! c) fetch-all (map descr-to-rec) (into {})))
+
+(defn show-table [c table]
+  (->> table (str "SHOW CREATE TABLE ") (exec! c) fetch-all first :statement))
 
 (defn db-table-key
   [item] (str (:database item) "." (:table item)))
@@ -96,12 +112,12 @@
       queries)))
 
 (defmulti set-pst-item class)
-(defmethod set-pst-item java.lang.Float    [x] (fn [p-st i v] (.setFloat p-st i v)))
-(defmethod set-pst-item java.lang.Double   [x] (fn [p-st i v] (.setDouble p-st i v)))
-(defmethod set-pst-item java.lang.Boolean  [x] (fn [p-st i v] (.setBoolean p-st i v)))
-(defmethod set-pst-item java.lang.Long     [x] (fn [p-st i v] (.setLong p-st i v)))
-(defmethod set-pst-item java.lang.String   [x] (fn [p-st i v] (.setString p-st i v)))
-(defmethod set-pst-item java.sql.Timestamp [x] (fn [p-st i v] (.setTimestamp p-st i v)))
+(defmethod set-pst-item java.lang.Float    [_] (fn [p-st i v] (.setFloat p-st i v)))
+(defmethod set-pst-item java.lang.Double   [_] (fn [p-st i v] (.setDouble p-st i v)))
+(defmethod set-pst-item java.lang.Boolean  [_] (fn [p-st i v] (.setBoolean p-st i v)))
+(defmethod set-pst-item java.lang.Long     [_] (fn [p-st i v] (.setLong p-st i v)))
+(defmethod set-pst-item java.lang.String   [_] (fn [p-st i v] (.setString p-st i v)))
+(defmethod set-pst-item java.sql.Timestamp [_] (fn [p-st i v] (.setTimestamp p-st i v)))
 
 (defn set-pst-item!
   [p-st i v]
@@ -153,6 +169,34 @@
     (if partition-by (str " PARTITION BY " partition-by) "")
     (if (empty? settings) "" (str " SETTINGS " (c/comma-join settings)))
     ))
+
+(defn ensure-tables!
+  "Ensure that tables created and have all needed columns"
+  [conn tables-map]
+  (let [all-tables (set (fetch-tables conn))
+        [tabs-check tabs-create] (c/group-by-contains all-tables (keys tables-map))]
+    (doseq [name tabs-create]
+      (->> name
+           tables-map
+           (apply create-table-query name)
+           (exec! conn)))
+    (doseq [tab-name tabs-check
+            :let [cols (first (tables-map tab-name))
+                  desc (describe-table conn tab-name)
+                  [cols-check cols-create] (c/group-by-contains desc (keys cols))
+                  cols-check' (map (juxt identity cols desc) cols-check)
+                  cols-bad (filter (fn [[_ a b]] (not= a b)) cols-check')]]
+      (when (not-empty cols-bad)
+        (println "Warning ch/ensure-tables! - column types mismatch. Table" tab-name "cols" cols-bad))
+      (when (not-empty cols-create)
+        (->> cols-create
+             (select-keys cols)
+             (map (comp (partial str "ADD COLUMN ") column-desc-query))
+             (str/join ", ")
+             (str "ALTER TABLE " tab-name " ")
+             (exec! conn))
+        (println "Info ch/ensure-tables! - table" tab-name "created cols:" (str/join ", " (map name cols-create))))
+      )))
 
 (defn insert-query
   [table rec]
