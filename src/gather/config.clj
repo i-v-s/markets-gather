@@ -23,6 +23,15 @@
     (throw (Exception. (str message ": " value)))
   ))
 
+(def group-pairs
+  "Group pairs by quoted asset"
+  (comp
+   (partial apply zipmap)
+   (juxt keys
+         (comp (partial mapv (partial mapv first)) vals))
+   (partial group-by second)
+   (partial map c/hyphen-split)))
+
 (defn filter-exists
   [possible message items]
   (let [[good bad] (c/group-by-contains possible items)]
@@ -48,10 +57,11 @@
     :when (some? market)
     :let [
       all-pairs (-> market sg/get-all-pairs set)
-      filtered-raw-pairs (filter-exists all-pairs (str "Unknown pairs for market " (:name market)) raw-pairs)]]
+      filtered-raw-pairs (filter-exists all-pairs (str "Unknown pairs for market " (:name market)) raw-pairs)
+          filtered-candle-pairs (if cpf (filter (partial re-matches (re-pattern cpf)) all-pairs) all-pairs)]]
     (assoc market
       :candles (if candles (CandlesData.
-        (if cpf (filter (partial re-matches (re-pattern cpf)) all-pairs) all-pairs)
+        (group-pairs filtered-candle-pairs)
         (prepare-intervals market candles)
       ) nil)
       :raw (sg/make-raw-data (:name market) filtered-raw-pairs)

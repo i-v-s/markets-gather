@@ -201,8 +201,7 @@
              (str/join ", ")
              (str "ALTER TABLE " tab-name " ")
              (exec! conn))
-        (println "Info ch/ensure-tables! - table" tab-name "created cols:" (str/join ", " (map name cols-create))))
-      )))
+        (println "Info ch/ensure-tables! - table" tab-name "created cols:" (str/join ", " (map name cols-create)))))))
 
 (defn insert-query
   [table rec]

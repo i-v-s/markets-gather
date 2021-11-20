@@ -72,7 +72,12 @@
    candle-rec
    (for [pair pairs
          [field decl] candle-pair-fields]
-     [(c/lower (str pair "_" (name field))) decl])))
+     [(->> field
+           name
+           (str pair "_")
+           c/lower
+           keyword)
+      decl])))
 
 (defn construct-candle-recs
   [candles pairs & {:keys [settings] :or {settings []}}]
@@ -86,19 +91,12 @@
                     [:partition-by "toYear(time)"] [])
                   settings))])))
 
-(defn create-raw-tables-queries
-  "Get queries for raw market data tables creation"
-  [db market pairs settings]
-  (concat [(str "CREATE DATABASE IF NOT EXISTS " db) (str "USE " db)]
-    (for [pair pairs [type rec] raw-table-types]
-      (apply ch/create-table-query (c/get-table-name market pair type) (conj rec :settings settings)))))
-
 (defn ensure-tables!
   "Create market tables"
   [{db :db url :url policy :storage-policy}
    {market :name
-    {raw-pairs :pairs}
-    :raw {candle-pairs :pairs candles :intervals} :candles}]
+    {raw-pairs :pairs} :raw
+    {candle-pairs :pairs candles :intervals} :candles}]
   (let [conn (ch/connect url)
         settings (if policy [(str "storage_policy = '" policy "'")] [])]
     ;(.setClientInfo conn "max_query_size" "1000000")
@@ -108,8 +106,9 @@
      [(for [pair raw-pairs [tp rec] raw-table-types]
         [(c/get-table-name market pair tp)
          (conj rec :settings settings)])
-      (for [[candle rec] (construct-candle-recs candles candle-pairs)]
-        [(c/get-table-name market (c/candle-name candle) :c)
+      (for [[quote assets] candle-pairs
+            [candle rec] (construct-candle-recs candles assets)]
+        [(c/get-table-name market (str quote "_" (c/candle-name candle)) :c)
          (conj rec :settings settings)])]
      (apply concat)
      (into {})
