@@ -14,10 +14,14 @@
   :1h 3600 :2h 7200 :4h 14400 :6h (* 6 3600) :8h (* 8 3600) :12h (* 12 3600)
   :1d 86400 :3d (* 3 86400) :1w (* 7 86400) :1M (* 31 86400)})
 
+(defn candle-name [k] (str/replace (name k) "M" "mo"))
+
 (defn lower
   "Convert name to lowercase and '-' to '_'"
   [name]
   (clojure.string/lower-case (clojure.string/replace name "-" "_")))
+
+(defn hyphen-split [s] (str/split s #"-"))
 
 (def capitalize-key
   "Converts :key to \"Key\""

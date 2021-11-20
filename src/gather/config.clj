@@ -40,7 +40,7 @@
 (defn load-markets
   [markets-config]
   (for [
-    [market-key {raw-pairs :raw-pairs candles :candles}] markets-config
+    [market-key {raw-pairs :raw-pairs candles :candles cpf :candle-pair-filter}] markets-config
     :let [market (case market-key
       :exmo (exmo/create)
       :binance (binance/create)
@@ -51,7 +51,7 @@
       filtered-raw-pairs (filter-exists all-pairs (str "Unknown pairs for market " (:name market)) raw-pairs)]]
     (assoc market
       :candles (if candles (CandlesData.
-        all-pairs
+        (if cpf (filter (partial re-matches (re-pattern cpf)) all-pairs) all-pairs)
         (prepare-intervals market candles)
       ) nil)
       :raw (sg/make-raw-data (:name market) filtered-raw-pairs)

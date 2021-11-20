@@ -93,35 +93,27 @@
     (for [pair pairs [type rec] raw-table-types]
       (apply ch/create-table-query (c/get-table-name market pair type) (conj rec :settings settings)))))
 
-(defn create-candle-tables-queries
-  "Get queries for candle data tables creation"
-  [market-name candle-recs]
-  (for [[candle rec] candle-recs]
-    (apply ch/create-table-query
-           (c/get-table-name market-name (name candle) :c)
-           rec)))
-
-(defn ensure-candle-tables!
-  "Create candle tables if absent and create absent cols"
-  [conn market-name exists-tables candle-recs]
-  (for [[candle rec] candle-recs
-        :let [table-name (c/get-table-name market-name (name candle) :c)]]
-    (if (contains? exists-tables table-name)
-      ()
-      (ch/exec! conn
-                (apply ch/create-table-query
-                       (c/get-table-name market-name (name candle) :c)
-                       rec)))))
-
-(defn create-raw-tables!
+(defn ensure-tables!
   "Create market tables"
-  [{db :db url :url policy :storage-policy} {market :name {raw-pairs :pairs} :raw}]
-  (ch/exec-vec!
-    (ch/connect url)
-    (create-raw-tables-queries
-      db market raw-pairs
-      (if policy [(str "storage_policy = '" policy "'")] []))
-   ))
+  [{db :db url :url policy :storage-policy}
+   {market :name
+    {raw-pairs :pairs}
+    :raw {candle-pairs :pairs candles :intervals} :candles}]
+  (let [conn (ch/connect url)
+        settings (if policy [(str "storage_policy = '" policy "'")] [])]
+    ;(.setClientInfo conn "max_query_size" "1000000")
+    (ch/create-db! conn db)
+    (ch/use! conn db)
+    (->>
+     [(for [pair raw-pairs [tp rec] raw-table-types]
+        [(c/get-table-name market pair tp)
+         (conj rec :settings settings)])
+      (for [[candle rec] (construct-candle-recs candles candle-pairs)]
+        [(c/get-table-name market (c/candle-name candle) :c)
+         (conj rec :settings settings)])]
+     (apply concat)
+     (into {})
+     (ch/ensure-tables! conn))))
 
 (defn market-insert-query
   [market pair type]
@@ -170,10 +162,10 @@
 
 (defn make-raw-buffers
   "Prepare empty write buffers in form {\"name\" [buffer table]}. \"name\" may be pair or candle interval"
-  [market-name raw-pairs tp]
+  [market raw-pairs tp]
   (into {} (for [pair raw-pairs]
              [pair (WriteCache. (make-buffer)
-                                (c/get-table-name market-name pair tp))])))
+                                (c/get-table-name market pair tp))])))
 
 (defn push-raw! [bufs pair rows]
   (let [{item pair} bufs]

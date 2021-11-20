@@ -15,6 +15,12 @@
   [c db]
   (exec! c (str "USE " db)))
 
+(defn create-db!
+  "Execute USE statement"
+  [c db]
+  (exec! c (str "CREATE DATABASE IF NOT EXISTS " db)))
+
+
 (defn connect
   "Connect to Clickhouse"
   [url & {:keys [db]}]
