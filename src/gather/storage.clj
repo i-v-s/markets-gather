@@ -67,29 +67,33 @@
 ; Clickhouse storage functions
 
 (defn construct-candle-rec
-  [pairs]
+  [assets]
   (ch/conj-fields
    candle-rec
-   (for [pair pairs
+   (for [asset assets
          [field decl] candle-pair-fields]
      [(->> field
            name
-           (str pair "_")
+           (str asset "_")
            c/lower
            keyword)
       decl])))
 
 (defn construct-candle-recs
-  [candles pairs & {:keys [settings] :or {settings []}}]
+  [candles assets & {:keys [settings] :or {settings []}}]
   (into {}
         (for [candle candles]
           [candle
            (into []
                  (concat
-                  (construct-candle-rec pairs)
+                  (construct-candle-rec assets)
                   (if (< (c/intervals-map candle) (c/intervals-map :1d))
                     [:partition-by "toYear(time)"] [])
                   settings))])))
+
+(defn get-candle-table-name
+  [market quote candle]
+  (c/get-table-name market (str quote "_" (c/candle-name candle)) :c))
 
 (defn ensure-tables!
   "Create market tables"
@@ -108,23 +112,21 @@
          (conj rec :settings settings)])
       (for [[quote assets] candle-pairs
             [candle rec] (construct-candle-recs candles assets)]
-        [(c/get-table-name market (str quote "_" (c/candle-name candle)) :c)
+        [(get-candle-table-name market quote candle)
          (conj rec :settings settings)])]
      (apply concat)
      (into {})
      (ch/ensure-tables! conn))))
 
 (defn market-insert-query
-  [market pair type]
-  (ch/insert-query
-   (c/get-table-name market pair type)
-   (first (type raw-table-types))))
-
-(defn market-insert-query
-  [table type]
-  (ch/insert-query
-   table
-   (first (type raw-table-types))))
+  ([market pair type]
+   (ch/insert-query
+    (c/get-table-name market pair type)
+    (first (type raw-table-types))))
+  ([table type]
+   (ch/insert-query
+    table
+    (first (type raw-table-types)))))
 
 
 ; Memory storage functions
@@ -226,4 +228,73 @@
   "A protocol that abstracts exchange interactions"
   (get-all-pairs [this] "Return all pairs for current market")
   (gather-ws-loop! [this verbose] "Gather raw data via websockets")
+  (get-candles [this pair interval start end])
 )
+
+
+; Candle functions
+
+(deftype CandleState [data])
+
+(defn make-candle-state
+  []
+  (CandleState. (atom [[] nil])))
+
+(defn get-candles-batch
+  [market quote assets tf & {:keys [start starts] :or {starts {}}}]
+  (when (and (not start) (not= tf :1M))
+    (throw (Exception. "get-candles-batch: Only month candles allowed without start time specified")))
+  (let [{limit :candles-limit} market
+        end (if start (+ start (* limit (tf c/intervals-map))) nil)]
+    (for [asset assets
+          :let
+          [pair (str asset "-" quote)
+           start' (c/ts-max start (starts asset))]]
+      (get-candles market pair tf start' end))))
+
+(defn candle-batch-to-rows
+  [assets batch]
+  (let [maps (mapv (partial into {}) batch)
+        times (sort (c/set-of-keys maps))]
+    (for [time times :let [get-time #(% time)]]
+      (cons time
+       (->> maps
+            (map get-time)
+            (map list assets)
+            (filter second)
+            (apply map list)
+            )))))
+
+(defn group-candle-rows
+  [rows]
+  (map
+   (juxt first
+         (comp
+          (partial
+           map
+           (fn [[time _ items]]
+             (cons
+              (java.sql.Timestamp. time)
+              (apply concat items))))
+          last))
+   (group-by second rows)))
+
+(defn insert-candle-rows!
+  [conn table assets rows]
+  (ch/insert-many!
+   conn
+   (ch/insert-query
+    table
+    (first (construct-candle-rec assets)))
+   rows))
+
+(defn grab-candles!
+  [conn market quote tf]
+  (let [assets (-> market :candles :pairs (get quote))
+        table (get-candle-table-name (:name market) quote tf)]
+    (->> (get-candles-batch market quote assets tf)
+         (candle-batch-to-rows assets)
+         (group-candle-rows)
+         (map (partial apply insert-candle-rows! conn table))
+         doall
+         )))

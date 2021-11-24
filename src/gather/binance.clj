@@ -13,6 +13,8 @@
   "Chart intervals: (m)inutes, (h)ours, (d)ays, (w)eeks, (M)onths"
   ["1m" "3m" "5m" "15m" "30m" "1h" "2h" "4h" "6h" "8h" "12h" "1d" "3d" "1w" "1M"])
 
+(def binance-candles-limit 1000)
+
 (defn de-hyphen
   "Remove hyphens from string"
   [item]
@@ -66,7 +68,7 @@
   (c/url-encode-params
     "https://api.binance.com/api/v3/klines"
     :symbol (de-hyphen pair)
-    :interval interval
+    :interval (name interval)
     :startTime start
     :endTime end
     :limit limit
@@ -117,11 +119,10 @@
          (-> q Float/parseFloat (* price) float)]))))
 
 (defn transform-candle-rest
-  "Transform candle record to Clickhouse row"
+  "Transform candle record to further processing"
   [[t, o, h, l, c, v, _, qv, nt, bv, bqv]]
-  [
-    (new java.sql.Timestamp t)
-    (Double/parseDouble o)
+  [t
+   [(Double/parseDouble o)
     (Double/parseDouble h)
     (Double/parseDouble l)
     (Double/parseDouble c)
@@ -129,8 +130,7 @@
     (Float/parseFloat qv)
     nt
     (Float/parseFloat bv)
-    (Float/parseFloat bqv)
-  ])
+    (Float/parseFloat bqv)]])
 
 (defn push-recent-trades!
   "Get recent trades from REST and put them by callback"
@@ -162,10 +162,9 @@
 (defn get-candles
   "Get candles by REST"
   [pair interval & {:keys [start end limit]}]
-  (->> (candles-rest-query pair interval :start (c/ts-to-long start) :end (c/ts-to-long end) :limit limit)
-    c/http-get-json
-    (map transform-candle-rest)
-  ))
+  (->> (candles-rest-query pair interval :start start :end end :limit limit)
+       c/http-get-json
+       (map transform-candle-rest)))
 
 (defn parse-topic
   [topic]
@@ -206,7 +205,7 @@
                    "b" (concat ss-bid bid)))))
       data)))
 
-(defrecord Binance [name intervals-map raw candles]
+(defrecord Binance [name intervals-map candles-limit raw candles]
   sg/Market
   (get-all-pairs [_]
     (->> (info-rest-query)
@@ -247,8 +246,10 @@
                           (println "\nBinance exception during chunk processing. Stream" stream "data:")
                           (println data)
                           (throw e)))
-                      (println "\nBinance: unknown stream pair" stream "pair was" pair-id)))))))
+                      (println "\nBinance: unknown stream pair" stream "pair was" pair-id))))))
+  (get-candles [_ pair interval start end]
+    (get-candles pair interval :start start :end end)))
 
 (defn create
   "Create Binance instance"
-  [] (Binance. "Binance" (zipmap (map keyword binance-intervals) binance-intervals) nil nil))
+  [] (Binance. "Binance" (zipmap (map keyword binance-intervals) binance-intervals) binance-candles-limit nil nil))

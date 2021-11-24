@@ -1,13 +1,14 @@
 (ns gather.common
   (:require
-    [clojure.string :as str]
-    [clojure.core.async :as a]
-    [clojure.java.shell :as sh]
-    [clojure.data.json :as json]
-    [clojure.tools.cli :refer [parse-opts]]
-    [byte-streams :as bs]
-    [aleph.http :as http]
-  ))
+   [clojure.string :as str]
+   [clojure.core.async :as a]
+   [clojure.java.shell :as sh]
+   [clojure.data.json :as json]
+   [clojure.set :refer [union]]
+   [clojure.tools.cli :refer [parse-opts]]
+   [clojure.stacktrace :refer [print-stack-trace]]
+   [byte-streams :as bs]
+   [aleph.http :as http]))
 
 (def intervals-map {
   :1m 60 :3m 180 :5m 300 :15m 900 :30m 1800 
@@ -58,6 +59,16 @@
         (group-by (partial contains? possible) values)]
     [exists not-exists]))
 
+(defn ts-max [& args]
+  (let [args' (filter some? args)]
+    (if (not-empty args')
+      (apply max args')
+      nil)))
+
+(defn set-of-keys
+  [items]
+  (transduce (map (comp set keys)) union items))
+
 (defn ts-to-long
   [ts]
   (if (nil? ts) nil (.getTime ts)))
@@ -99,7 +110,7 @@
        (func)
        (catch Exception e
          (println "\n" title "exception:")
-         (clojure.stacktrace/print-stack-trace e)))
+         (print-stack-trace e)))
     (Thread/sleep delay)
     (recur)))
 
@@ -122,8 +133,9 @@
   (let [last (atom 0)]
     (fn [& args]
       (let [t (System/currentTimeMillis)]
-        (if (> t @last)
-          (do (apply f! args) (reset! last (+ ms t))))))))
+        (when (> t @last)
+          (apply f! args)
+          (reset! last (+ ms t)))))))
 
 (defn map-sum
   "Summarize hashmap values by key aggregation"

@@ -40,7 +40,8 @@
   [path target result]
   ;(println "tar" "-rvf" result table :dir path)
   (let [{exit :exit err :err} (sh/sh "tar" "-rvf" result target :dir path)]
-    (if (not= exit 0) (throw (Exception. err)))))
+    (when (not= exit 0)
+      (throw (Exception. err)))))
 
 (defn pack-shadow!
   [sd result]
