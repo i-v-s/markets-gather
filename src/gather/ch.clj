@@ -1,9 +1,5 @@
 (ns gather.ch
   (:require     [clojure.string :as str]
-                [hugsql.core :as hugsql]
-                [hikari-cp.core :refer [close-datasource make-datasource]]
-                [clojure.java.jdbc :as jdbc]
-                [hugsql.adapter.clickhouse-native-jdbc :as clickhouse]
                 [gather.common :as c]))
 
 (import java.sql.DriverManager)
@@ -209,7 +205,7 @@
     "INSERT INTO " table " ("
     (c/comma-join (for [[key _] rec] (name key)))
     ") VALUES ("
-    (c/comma-join (for [a rec] "?"))
+    (-> rec count (repeat "?") c/comma-join)
     ")"))
 
 (defn copy-table

@@ -253,6 +253,7 @@
       (get-candles market pair tf start' end))))
 
 (defn candle-batch-to-rows
+  "Returns rows in format '(long time, assets, data)"
   [assets batch]
   (let [maps (mapv (partial into {}) batch)
         times (sort (c/set-of-keys maps))]
@@ -289,12 +290,17 @@
    rows))
 
 (defn grab-candles!
+  "Return last ts"
   [conn market quote tf]
   (let [assets (-> market :candles :pairs (get quote))
-        table (get-candle-table-name (:name market) quote tf)]
-    (->> (get-candles-batch market quote assets tf)
-         (candle-batch-to-rows assets)
+        table (get-candle-table-name (:name market) quote tf)
+        current (c/dec-ts (c/now-ts) tf)
+        rows (->> (get-candles-batch market quote assets tf)
+                  (candle-batch-to-rows assets)
+                  (filter (comp (partial > current) first)))
+        last-ts (-> rows last first)]
+    (->> rows
          (group-candle-rows)
          (map (partial apply insert-candle-rows! conn table))
-         doall
-         )))
+         doall)
+    last-ts))

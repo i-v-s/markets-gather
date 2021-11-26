@@ -10,6 +10,9 @@
    [byte-streams :as bs]
    [aleph.http :as http]))
 
+(import
+ [java.time LocalDateTime ZoneOffset])
+
 (def intervals-map {
   :1m 60 :3m 180 :5m 300 :15m 900 :30m 1800 
   :1h 3600 :2h 7200 :4h 14400 :6h (* 6 3600) :8h (* 8 3600) :12h (* 12 3600)
@@ -123,10 +126,25 @@
   [f]
   (.addShutdownHook (Runtime/getRuntime) (Thread. (f))))
 
+(defn now-ts [] (System/currentTimeMillis))
+
 (defn now
   "Return current time"
   []
-  (new java.sql.Timestamp (System/currentTimeMillis)))
+  (java.sql.Timestamp. (now-ts)))
+
+(defn inc-ts
+  [ts tf & {:keys [mul] :or {mul 1}}]
+  (case tf
+    :1M (-> (LocalDateTime/ofEpochSecond (long (/ ts 1000)) 0 ZoneOffset/UTC)
+            (.plusMonths mul)
+            (.toEpochSecond ZoneOffset/UTC)
+            (* 1000))
+    (+ ts (* mul (tf intervals-map)))))
+
+(defn dec-ts
+  [ts tf & {:keys [mul] :or {mul 1}}]
+  (inc-ts ts tf :mul (- mul)))
 
 (defn throttle
   [ms f!]
