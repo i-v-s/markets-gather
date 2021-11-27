@@ -45,26 +45,50 @@
 (defn get-metadata
   [result-set]
   (let [md (.getMetaData result-set)]
-    (->> md .getColumnCount inc (range 1) (map (fn [i] [
-      (->> i (.getColumnLabel md) keyword)
-      (.getColumnTypeName md i)
-    ]))
-    ;(into {})
-    )))
+    (->> md
+         .getColumnCount
+         inc
+         (range 1)
+         (map
+          (fn [i]
+            [(->> i (.getColumnLabel md) keyword)
+             (.getColumnTypeName md i)])))))
 
-(defn fetch-row
+(defmulti read-result-set (fn [t _ _] t))
+(defmethod read-result-set "UInt8" [_ rs j] (.getLong rs j))
+(defmethod read-result-set "String" [_ rs j] (.getString rs j))
+(defmethod read-result-set "Nullable(DateTime)" [_ rs j] (.getTimestamp rs j))
+(defmethod read-result-set "DateTime" [_ rs j] (.getTimestamp rs j))
+
+(defn fetch-row-hm
   [result-set metadata]
-  (->> metadata (map-indexed (fn [i [k t]]
-    (let [j (inc i)] {k (case t
-      "UInt8" (.getLong result-set j)
-      "String" (.getString result-set j)
-      )}))) (into {})))
+  (->> metadata
+       (map-indexed
+        (fn [i [k t]]
+          (let [j (inc i)]
+            [k (read-result-set t result-set j)])))
+       (into {})))
+
+(defn fetch-one
+  [result-set]
+  (let [md (.getMetaData result-set)]
+    (.next result-set)
+    (for [i (range 1 (inc (.getColumnCount md)))]
+      (read-result-set (.getColumnTypeName md i) result-set i))))
+
+(defn current-db
+  [c]
+  (->> "SELECT currentDatabase()"
+       (exec! c)
+       fetch-one
+       first))
 
 (defn fetch-all
   "Fetch all rows from result-set"
   [result-set]
   (let [md (get-metadata result-set)]
-    (for [_ (range) :while (.next result-set)] (fetch-row result-set md))))
+    (while (.next result-set)
+      (fetch-row-hm result-set md))))
 
 (defn fetch-tables
   "Fetch all table names from current DB"

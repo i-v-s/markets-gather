@@ -193,10 +193,10 @@
             {u2 "u"} data]
         (if (<= u2 last-id)
           data
-          (let [{ask "a" bid "b" u1 "U" time "E"} data
+          (let [{ask "a" bid "b" _u1 "U" _time "E"} data
                 {ss-ask "a" ss-bid "b"} ss
                 left (count @snapshot)]
-            (println "\nBinance mix-depth: pair" pair "time" (c/ts-str time) "last" last-id "U" u1 "u" u2 "left" left)
+            ;(println "\nBinance mix-depth: pair" pair "time" (c/ts-str _time) "last" last-id "U" _u1 "u" u2 "left" left)
             (if (== 1 left)
               (reset! snapshot nil)
               (swap! snapshot dissoc pair))

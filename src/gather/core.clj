@@ -1,13 +1,13 @@
 (ns gather.core
   (:require
-    [gather.config :as cfg]
-    [gather.ch :as ch]
-    [gather.storage :as sg]
-    [gather.drop :as drop]
-    [gather.backup :as backup]
-    [gather.restore :as restore]
-    [gather.common :as c]
-  ))
+   [clojure.core.async :as a]
+   [gather.config :as cfg]
+   [gather.ch :as ch]
+   [gather.storage :as sg]
+   [gather.drop :as drop]
+   [gather.backup :as backup]
+   [gather.restore :as restore]
+   [gather.common :as c]))
 
 (defn raw-insert-loop!
   "Worker, that periodicaly inserts rows from raw buffers into Clickhouse"
@@ -22,9 +22,11 @@
       (recur))))
 
 (defn candles-insert-loop!
-  [market db-cfg]
-  ;(println market)
-  (println "Candles-insert-loop"))
+  [market {db-url :url db :db}]
+  (sg/grab-all-candles!
+   (ch/connect db-url :db db)
+   db
+   market))
 
 (defn main
   "Entry point"
@@ -36,10 +38,8 @@
         (println (str "\n" (new java.util.Date) " Starting " (:name market) " WS"))
         (sg/gather-ws-loop! market :info))
       :title (str (:name market) " WS"))
-      ;(c/forever-loop #(do
-      ;  (println (str "\n" (new java.util.Date) " Starting " market-name " REST"))
-      ;) :title (str market-name " REST")
-      (candles-insert-loop! market db-cfg)
+      (a/thread
+       (candles-insert-loop! market db-cfg))
       )
     (c/try-loop (partial raw-insert-loop! markets db-cfg) :title "Core" :delay 10000)
   ))

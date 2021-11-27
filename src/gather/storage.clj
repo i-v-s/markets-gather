@@ -1,8 +1,8 @@
 (ns gather.storage
   (:require
-    [gather.ch :as ch]
-    [gather.common :as c]
-  ))
+   [clojure.string :as str]
+   [gather.ch :as ch]
+   [gather.common :as c]))
 
 
 ; Clickhouse table structures
@@ -92,8 +92,8 @@
                   settings))])))
 
 (defn get-candle-table-name
-  [market quote candle]
-  (c/get-table-name market (str quote "_" (c/candle-name candle)) :c))
+  [market-name quote tf]
+  (c/get-table-name market-name (str quote "_" (c/candle-name tf)) :c))
 
 (defn ensure-tables!
   "Create market tables"
@@ -240,17 +240,52 @@
   []
   (CandleState. (atom [[] nil])))
 
+(defn get-candle-starts
+  [conn market quote tf]
+  (let [assets (-> market :candles :pairs (get quote))
+        table (get-candle-table-name (:name market) quote tf)]
+    (->> assets
+         (map
+          #(str
+            "(SELECT MIN(time) FROM " table
+            " WHERE " (str/lower-case %) "_open != 0) AS " %))
+         c/comma-join
+         (str "SELECT ")
+         (ch/exec! conn)
+         ch/fetch-one
+         (map (fn [k v] [k (.getTime v)]) assets)
+         (filter (comp pos? second)))))
+
+(defn get-last-candle
+  [conn market quote tf]
+  (->> (get-candle-table-name (:name market) quote tf)
+       (str "SELECT MAX(time) FROM ")
+       (ch/exec! conn)
+       ch/fetch-one
+       first
+       .getTime
+       ))
+
+(defn get-next-candle
+  [conn market quote tf]
+  (let [lc (get-last-candle conn market quote tf)]
+    (if (pos? lc)
+      (c/inc-ts lc tf)
+      nil)))
+
 (defn get-candles-batch
   [market quote assets tf & {:keys [start starts] :or {starts {}}}]
   (when (and (not start) (not= tf :1M))
     (throw (Exception. "get-candles-batch: Only month candles allowed without start time specified")))
   (let [{limit :candles-limit} market
-        end (if start (+ start (* limit (tf c/intervals-map))) nil)]
+        end (if start (c/inc-ts start tf :mul limit) nil)]
     (for [asset assets
           :let
           [pair (str asset "-" quote)
            start' (c/ts-max start (starts asset))]]
-      (get-candles market pair tf start' end))))
+      (if (or (nil? start') (< start' end))
+        (get-candles market pair tf start' end)
+        []))))
 
 (defn candle-batch-to-rows
   "Returns rows in format '(long time, assets, data)"
@@ -290,17 +325,36 @@
    rows))
 
 (defn grab-candles!
-  "Return last ts"
-  [conn market quote tf]
+  "Return next ts"
+  [conn db market quote tf & args]
   (let [assets (-> market :candles :pairs (get quote))
         table (get-candle-table-name (:name market) quote tf)
         current (c/dec-ts (c/now-ts) tf)
-        rows (->> (get-candles-batch market quote assets tf)
+        rows (->> (apply get-candles-batch market quote assets tf args)
                   (candle-batch-to-rows assets)
                   (filter (comp (partial > current) first)))
         last-ts (-> rows last first)]
+    (ch/use! conn db)
     (->> rows
          (group-candle-rows)
          (map (partial apply insert-candle-rows! conn table))
          doall)
-    last-ts))
+    (c/inc-ts last-ts tf)))
+
+(defn grab-all-candles!
+  [conn db  market]
+  (doseq [:let [{market-name :name {pairs :pairs tfs :intervals} :candles} market]
+          [quote assets] pairs
+          :let [starts (atom {})]
+          tf tfs]
+    (let [start (atom (or
+                       (get-next-candle conn market quote tf)
+                       (if (not-empty @starts) (apply min (map second @starts)) nil)))
+          current (c/dec-ts (c/now-ts) tf)]
+      (while (or (nil? @start) (< @start current))
+        (println "\nGrabbing candles from" market-name quote tf (if @start (c/ts-str @start) "*"))
+        (reset!
+         start
+         (grab-candles! conn db market quote tf :start @start :starts @starts))))
+    (when (not= tf (last tfs))
+      (reset! starts (into {} (get-candle-starts conn market quote (first tfs)))))))
