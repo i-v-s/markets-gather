@@ -10,7 +10,7 @@
                 "RVN-USDT", "EOS-USDT", "1INCH-USDT", "MATIC-USDT", "SOL-USDT", "UNI-USDT",
                 "ZIL-USDT", "WAVES-USDT", "XRP-USDT", "TRX-USDT", "ADA-USDT", "DOGE-USDT", "CAKE-USDT",
                 "VET-USDT", "BAKE-USDT", "DOT-USDT", "XMR-USDT", "SHIB-USDT"],
-            "candles": ["5m", "15m", "1h", "4h", "1d"]
+            "candles": ["5m", "15m", "1h", "4h", "1d", "1w", "1M"]
         },
         "exmo": {
             "raw-pairs": [
@@ -18,7 +18,7 @@
                 "EOS-USD", "UNI-BTC", "ATOM-USD", "BCH-USD", "BTG-USD", "NEO-USD",
                 "WAVES-USD", "XRP-USDT", "TRX-USD", "ADA-USDT", "DOGE-USD", "ZEC-USD",
                 "XLM-USD", "ALGO-USDT", "BTT-RUB", "DASH-USD", "OMG-USD", "QTUM-USD"],
-            "candles": ["5m", "15m", "1h", "4h", "1d"]
+            "candles": ["5m", "15m", "1h", "4h", "1d", "1w", "1M"]
         }
     }
 }

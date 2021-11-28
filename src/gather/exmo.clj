@@ -26,6 +26,20 @@
    (Double/parseDouble price)
    (Float/parseFloat amount)])
 
+(defn transform-candle-rest
+  "Transform candle record to further processing"
+  [{t "t" o "o" c "c" h "h" l "l" v "v"}]
+  [t
+   [(double o)
+    (double h)
+    (double l)
+    (double c)
+    (float v)
+    (float 0)
+    0
+    (float 0)
+    (float 0)]])
+
 (defn pair-topic
   "Convert pair to topic"
   [topic pair]
@@ -64,7 +78,7 @@
     (sg/push-raw! sell dp (map td ask))
     (sg/push-raw! buy dp (map td bid))))
 
-(defrecord Exmo [name intervals-map raw candles]
+(defrecord Exmo [name intervals-map candles-limit raw candles]
   sg/Market
   (get-all-pairs [_]
     (->> "https://api.exmo.com/v1.1/pair_settings"
@@ -96,8 +110,17 @@
                          "trades" (sg/push-raw! trades (dexmo-pair pair) (map transform-trade data))
                          "order_book_updates" (push-ws-depth! raw ts pair data)
                          (print-msg ts "Exmo WS unknown update topic: " topic)))
-            (println "Exmo WS unknown event: " event)))))))
+            (println "Exmo WS unknown event: " event))))))
+  (get-candles [_ pair tf start end]
+    (->> (get
+          (c/http-get-json "https://api.exmo.com/v1.1/candles_history"
+                           :symbol (str/replace pair "-" "_")
+                           :resolution (tf exmo-intervals)
+                           :from (if start (long (/ start 1000)) 0)
+                           :to (long (/ (or end (c/now-ts)) 1000)))
+          "candles")
+         (map transform-candle-rest))))
 
 (defn create
   "Create Exmo instance"
-  [] (Exmo. "Exmo" exmo-intervals nil nil))
+  [] (Exmo. "Exmo" exmo-intervals 3000 nil nil))
