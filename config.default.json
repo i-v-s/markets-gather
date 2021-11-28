@@ -1,7 +1,6 @@
 {
     "clickhouse": {
-        "url": "jdbc:clickhouse://127.0.0.1:9000",
-        "db": "fx",
+        "url": "jdbc:clickhouse://127.0.0.1:9000/fx",
         "storage-policy": "ssd_to_hdd"
     },
     "markets": {

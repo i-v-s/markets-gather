@@ -4,6 +4,16 @@
 
 (import java.sql.DriverManager)
 
+(defn connect
+  "Connect to Clickhouse"
+  [url]
+  (DriverManager/getConnection url))
+
+(defn connect-st
+  "Connect to Clickhouse"
+  [url & args]
+  (.createStatement (apply connect url args)))
+
 (defmulti exec! "Execute SQL query" (fn [c _] (class c)))
 
 (defn use!
@@ -11,23 +21,18 @@
   [c db]
   (exec! c (str "USE " db)))
 
+(defn parse-url
+  [url]
+  (if-let [items (re-find #"^(jdbc:clickhouse://[\w\-:\.]+)/(\w+)$" url)]
+    (rest items) nil))
+
 (defn create-db!
-  "Execute USE statement"
-  [c db]
+  "Execute CREATE DATABASE statement"
+  ([c db]
   (exec! c (str "CREATE DATABASE IF NOT EXISTS " db)))
-
-
-(defn connect
-  "Connect to Clickhouse"
-  [url & {:keys [db]}]
-  (let [c (DriverManager/getConnection url)]
-    (when db (use! c db))
-    c))
-
-(defn connect-st
-  "Connect to Clickhouse"
-  [url & args]
-  (.createStatement (apply connect url args)))
+  ([url]
+   (when-let [[default-url db] (parse-url url)]
+     (create-db! (connect default-url) db))))
 
 (defmethod exec! com.github.housepower.jdbc.statement.ClickHouseStatement
   [stmt query]
@@ -87,7 +92,7 @@
   "Fetch all rows from result-set"
   [result-set]
   (let [md (get-metadata result-set)]
-    (while (.next result-set)
+    (for [_ (range) :while (.next result-set)]
       (fetch-row-hm result-set md))))
 
 (defn fetch-tables

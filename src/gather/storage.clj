@@ -8,7 +8,7 @@
 ; Clickhouse table structures
 
 (def trade-rec [(array-map
-    :id "Int32 CODEC(Delta, LZ4)"
+    :id "Int32 CODEC(Delta(4), LZ4)"
     :time "DateTime"
     :buy "UInt8"
     :price "Float64 CODEC(Gorilla)"
@@ -97,15 +97,12 @@
 
 (defn ensure-tables!
   "Create market tables"
-  [{db :db url :url policy :storage-policy}
+  [{url :url policy :storage-policy}
    {market :name
     {raw-pairs :pairs} :raw
     {candle-pairs :pairs candles :intervals} :candles}]
   (let [conn (ch/connect url)
         settings (if policy [(str "storage_policy = '" policy "'")] [])]
-    ;(.setClientInfo conn "max_query_size" "1000000")
-    (ch/create-db! conn db)
-    (ch/use! conn db)
     (->>
      [(for [pair raw-pairs [tp rec] raw-table-types]
         [(c/get-table-name market pair tp)
@@ -275,8 +272,6 @@
 
 (defn get-candles-batch
   [market quote assets tf & {:keys [start starts] :or {starts {}}}]
-  (when (and (not start) (not= tf :1M))
-    (throw (Exception. "get-candles-batch: Only month candles allowed without start time specified")))
   (let [{limit :candles-limit} market
         end (if start (c/inc-ts start tf :mul limit) nil)]
     (for [asset assets
@@ -326,7 +321,7 @@
 
 (defn grab-candles!
   "Return next ts"
-  [conn db market quote tf & args]
+  [conn market quote tf & args]
   (let [assets (-> market :candles :pairs (get quote))
         table (get-candle-table-name (:name market) quote tf)
         current (c/dec-ts (c/now-ts) tf)
@@ -334,17 +329,18 @@
                   (candle-batch-to-rows assets)
                   (filter (comp (partial > current) first)))
         last-ts (-> rows last first)]
-    (ch/use! conn db)
     (->> rows
          (group-candle-rows)
          (map (partial apply insert-candle-rows! conn table))
          doall)
-    (c/inc-ts last-ts tf)))
+    (if last-ts
+      (c/inc-ts last-ts tf)
+      (c/now-ts))))
 
 (defn grab-all-candles!
-  [conn db  market]
+  [conn market]
   (doseq [:let [{market-name :name {pairs :pairs tfs :intervals} :candles} market]
-          [quote assets] pairs
+          quote (keys pairs)
           :let [starts (atom {})]
           tf tfs]
     (let [start (atom (or
@@ -355,6 +351,6 @@
         (println "\nGrabbing candles from" market-name quote tf (if @start (c/ts-str @start) "*"))
         (reset!
          start
-         (grab-candles! conn db market quote tf :start @start :starts @starts))))
+         (grab-candles! conn market quote tf :start @start :starts @starts))))
     (when (not= tf (last tfs))
       (reset! starts (into {} (get-candle-starts conn market quote (first tfs)))))))

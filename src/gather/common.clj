@@ -140,7 +140,7 @@
             (.plusMonths mul)
             (.toEpochSecond ZoneOffset/UTC)
             (* 1000))
-    (+ ts (* mul (tf intervals-map)))))
+    (+ ts (* mul 1000 (tf intervals-map)))))
 
 (defn dec-ts
   [ts tf & {:keys [mul] :or {mul 1}}]
