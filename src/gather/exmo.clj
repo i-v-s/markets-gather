@@ -119,9 +119,11 @@
                                 :to (long (/ (or end (c/now-ts)) 1000)))]
       (if-let [candles (data "candles")]
         (map transform-candle-rest candles)
-        (throw (if-let [error (data "error")]
-          (ex-info (str "Exmo get-candles error: " error) {:retry-after 1000})
-          (ex-info (str "Exmo get-candles request returned: " data) {})))))))
+        (if (= "no_data" (data "s"))
+          []
+          (throw (if-let [error (data "error")]
+                   (ex-info (str "Exmo get-candles error: " error) {:retry-after 1000})
+                   (ex-info (str "Exmo get-candles request returned: " data) {}))))))))
 
 (defn create
   "Create Exmo instance"

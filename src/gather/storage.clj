@@ -279,7 +279,13 @@
           [pair (str asset "-" quote)
            start' (c/ts-max start (starts asset))]]
       (if (or (nil? start') (< start' end))
-        (get-candles market pair tf start' end)
+        (let [candles
+              (c/with-retry 5
+                ;(println "Trying get " (:name market) pair tf (c/ts-str start') (c/ts-str end))
+                (get-candles market pair tf start' end))]
+          (when (empty? candles)
+            (println "\nWarning get-candles-batch: no data received" (:name market) pair tf (c/ts-str start') (c/ts-str end)))
+          candles)
         []))))
 
 (defn candle-batch-to-rows
@@ -353,4 +359,4 @@
          start
          (grab-candles! conn market quote tf :start @start :starts @starts))))
     (when (not= tf (last tfs))
-      (reset! starts (into {} (get-candle-starts conn market quote (first tfs)))))))
+      (reset! starts (into {} (get-candle-starts conn market quote tf))))))
