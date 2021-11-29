@@ -78,7 +78,9 @@
 
 (defn ts-str
   [ts & args]
-  (apply str (new java.sql.Timestamp ts) args))
+  (if (nil? ts)
+    "<nil>"
+    (apply str (java.sql.Timestamp. ts) args)))
 
 (defn http-get-json
   "Get JSON data with HTTP GET request"
@@ -116,6 +118,29 @@
          (print-stack-trace e)))
     (Thread/sleep delay)
     (recur)))
+
+(defmacro with-retry
+  "body must return non false value"
+  [tries & body]
+  (let [e (gensym 'e) left (gensym 'left) result (gensym 'result) wait (gensym 'wait)]
+    `(let [~result (atom nil)]
+       (loop [~left (dec ~tries)]
+         (when
+          (try
+            (reset! ~result (do ~@body))
+            false
+            (catch clojure.lang.ExceptionInfo ~e
+              (if-let [~wait (-> ~e ex-data :retry-after)]
+                (do
+                  (println (str "\nException (tries left " ~left "): " (ex-message ~e)))
+                  (if (pos? ~left)
+                    (do
+                      (Thread/sleep ~wait)
+                      true)
+                    (throw ~e)))
+                (throw ~e))))
+           (recur (dec ~left))))
+       @~result)))
 
 (defn forever-loop
   "Execute function in async thread loop"

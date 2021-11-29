@@ -112,14 +112,16 @@
                          (print-msg ts "Exmo WS unknown update topic: " topic)))
             (println "Exmo WS unknown event: " event))))))
   (get-candles [_ pair tf start end]
-    (->> (get
-          (c/http-get-json "https://api.exmo.com/v1.1/candles_history"
-                           :symbol (str/replace pair "-" "_")
-                           :resolution (tf exmo-intervals)
-                           :from (if start (long (/ start 1000)) 0)
-                           :to (long (/ (or end (c/now-ts)) 1000)))
-          "candles")
-         (map transform-candle-rest))))
+    (let [data (c/http-get-json "https://api.exmo.com/v1.1/candles_history"
+                                :symbol (str/replace pair "-" "_")
+                                :resolution (tf exmo-intervals)
+                                :from (if start (long (/ start 1000)) 0)
+                                :to (long (/ (or end (c/now-ts)) 1000)))]
+      (if-let [candles (data "candles")]
+        (map transform-candle-rest candles)
+        (throw (if-let [error (data "error")]
+          (ex-info (str "Exmo get-candles error: " error) {:retry-after 1000})
+          (ex-info (str "Exmo get-candles request returned: " data) {})))))))
 
 (defn create
   "Create Exmo instance"
