@@ -49,7 +49,7 @@
   [module & args]
   (case module
     "gather" (-> args (c/parse-options :config :help) :options :config main)
-    "gather.drop" (drop/-main args)
-    "gather.backup" (apply backup/-main args)
-    "gather.restore" (apply restore/-main args)
-  ))
+    "drop" (let [{{url :db-url config :config} :options args :arguments} (c/parse-options args :config :db-url :help)]
+             (drop/-main (or url (-> config cfg/load-json :clickhouse :url)) args))
+    "backup" (apply backup/-main args)
+    "restore" (apply restore/-main args)))

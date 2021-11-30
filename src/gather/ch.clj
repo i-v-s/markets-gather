@@ -41,8 +41,7 @@
     (catch Exception e
       (println "\nException during SQL execution. Query was:")
       (println query)
-      (throw e)
-  )))
+      (throw e))))
 
 (defmethod exec! com.github.housepower.jdbc.ClickHouseConnection [c query]
   (exec! (.createStatement c) query))

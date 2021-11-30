@@ -180,6 +180,18 @@
           (apply f! args)
           (reset! last (+ ms t)))))))
 
+(defn some-fn-map
+  "Combines some-f n with map. (some-fn-map f coll) = (apply some-fn (map f coll))"
+  [f items]
+  (let [fns (map f items)]
+    (fn [arg]
+      (loop [i fns]
+        (if-let [v (first i)]
+          (if (v arg)
+            true
+            (recur (rest i)))
+          false)))))
+
 (defn map-sum
   "Summarize hashmap values by key aggregation"
   [m & {:keys [k v] :or {v deref}}]
@@ -227,12 +239,12 @@
 (defn select-values [map ks]
   (reduce #(conj %1 (map %2)) [] ks))
 
-(def cli-options {
-  :config ["-c" "--config CONFIG" "Config file name"
-    :default nil
+(def cli-options
+  {:config ["-c" "--config CONFIG" "Config file name" :default nil
     ;:parse-fn #(Integer/parseInt %)
     ;:validate [#(< 0 % 0x10000) "Must be a number between 0 and 65536"]
-    ]
+            ]
+   :db-url ["-u" "--db-url URL" "Clickhouse database url" :default nil]
    ;; A non-idempotent option (:default is applied first)
   ; ["-v" nil "Verbosity level"
   ;  :id :verbosity
@@ -240,7 +252,6 @@
   ;  :update-fn inc] ; Prior to 0.4.1, you would have to use:
                    ;; :assoc-fn (fn [m k _] (update-in m [k] inc))
    ;; A boolean option defaulting to nil
-  :help ["-h" "--help"]
-  })
+   :help ["-h" "--help"]})
 
 (defn parse-options [args & keys] (parse-opts args (select-values cli-options keys)))
