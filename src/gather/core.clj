@@ -7,7 +7,8 @@
    [gather.drop :as drop]
    [gather.backup :as backup]
    [gather.restore :as restore]
-   [gather.common :as c]))
+   [gather.common :as c]
+   [gather.check :as ck]))
 
 (defn raw-insert-loop!
   "Worker, that periodicaly inserts rows from raw buffers into Clickhouse"
@@ -49,6 +50,8 @@
   [module & args]
   (case module
     "gather" (-> args (c/parse-options :config :help) :options :config main)
+    "check" (let [{{url :db-url config :config} :options args :arguments} (c/parse-options args :config :db-url :help)]
+             (ck/-main (or url (-> config cfg/load-json :clickhouse :url)) args))
     "drop" (let [{{url :db-url config :config} :options args :arguments} (c/parse-options args :config :db-url :help)]
              (drop/-main (or url (-> config cfg/load-json :clickhouse :url)) args))
     "backup" (apply backup/-main args)

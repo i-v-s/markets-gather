@@ -60,6 +60,7 @@
 
 (defmulti read-result-set (fn [t _ _] t))
 (defmethod read-result-set "UInt8" [_ rs j] (.getLong rs j))
+(defmethod read-result-set "UInt32" [_ rs j] (.getLong rs j))
 (defmethod read-result-set "String" [_ rs j] (.getString rs j))
 (defmethod read-result-set "Nullable(DateTime)" [_ rs j] (.getTimestamp rs j))
 (defmethod read-result-set "DateTime" [_ rs j] (.getTimestamp rs j))
@@ -72,6 +73,14 @@
           (let [j (inc i)]
             [k (read-result-set t result-set j)])))
        (into {})))
+
+(defn fetch-row
+  [result-set metadata]
+  (->> metadata
+       (map-indexed
+        (fn [i [_ t]]
+          (let [j (inc i)]
+            (read-result-set t result-set j))))))
 
 (defn fetch-one
   [result-set]
@@ -87,17 +96,24 @@
        fetch-one
        first))
 
-(defn fetch-all
+(defn fetch-all-hm
   "Fetch all rows from result-set"
   [result-set]
   (let [md (get-metadata result-set)]
     (for [_ (range) :while (.next result-set)]
       (fetch-row-hm result-set md))))
 
+(defn fetch-all
+  "Fetch all rows from result-set"
+  [result-set]
+  (let [md (get-metadata result-set)]
+    (for [_ (range) :while (.next result-set)]
+      (fetch-row result-set md))))
+
 (defn fetch-tables
   "Fetch all table names from current DB"
   [c]
-  (->> "SHOW TABLES" (exec! c) fetch-all (map :name)))
+  (->> "SHOW TABLES" (exec! c) fetch-all-hm (map :name)))
 
 (defn descr-to-rec
   [{name :name type :type def-expr :default_expression codec :codec_expression}]
@@ -111,10 +127,10 @@
     (str/join " " ))])
 
 (defn describe-table [c table]
-    (->> table (str "DESCRIBE TABLE ") (exec! c) fetch-all (map descr-to-rec) (into {})))
+  (->> table (str "DESCRIBE TABLE ") (exec! c) fetch-all-hm (map descr-to-rec) (into {})))
 
 (defn show-table [c table]
-  (->> table (str "SHOW CREATE TABLE ") (exec! c) fetch-all first :statement))
+  (->> table (str "SHOW CREATE TABLE ") (exec! c) fetch-all-hm first :statement))
 
 (defn db-table-key
   [item] (str (:database item) "." (:table item)))
@@ -130,7 +146,7 @@
       "GROUP BY partition, database, table "
       "ORDER BY database, table, partition")
     (exec! st)
-    fetch-all
+    fetch-all-hm
     (c/vec-to-map-of-vec (if db :table db-table-key) :partition)))
 
 (defn exec-vec!

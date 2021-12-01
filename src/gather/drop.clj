@@ -1,20 +1,14 @@
 (ns gather.drop
   (:require
-   [clojure.string :as str]
    [gather.common :as c]
    [gather.ch :as ch]))
-
-(defn make-wc
-  [item]
-  (re-pattern
-   (str "^" (str/replace item "*" "\\w+") "$")))
 
 (defn -main
   "Start with params"
   [db-url args]
   (if (empty? args)
     (println "No wildcards specified")
-    (let [wcs (map make-wc args)
+    (let [wcs (map c/make-wc args)
           checker (c/some-fn-map (partial partial re-find) wcs)
           st (ch/connect-st db-url)
           tabs (ch/fetch-tables st)

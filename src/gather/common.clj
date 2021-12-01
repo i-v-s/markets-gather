@@ -16,7 +16,7 @@
 (def intervals-map {
   :1m 60 :3m 180 :5m 300 :15m 900 :30m 1800 
   :1h 3600 :2h 7200 :4h 14400 :6h (* 6 3600) :8h (* 8 3600) :12h (* 12 3600)
-  :1d 86400 :3d (* 3 86400) :1w (* 7 86400) :1M (* 31 86400)})
+  :1d 86400 :3d (* 3 86400) :1w (* 7 86400) :1M (* 31 86400) :1mo (* 31 86400)})
 
 (defn candle-name [k] (str/replace (name k) "M" "mo"))
 
@@ -75,6 +75,8 @@
 (defn ts-to-long
   [ts]
   (if (nil? ts) nil (.getTime ts)))
+
+(defn ts-to-seconds [ts] (long (/ (ts-to-long ts) 1000)))
 
 (defn ts-str
   [ts & args]
@@ -152,11 +154,9 @@
   (.addShutdownHook (Runtime/getRuntime) (Thread. (f))))
 
 (defn now-ts [] (System/currentTimeMillis))
-
-(defn now
-  "Return current time"
-  []
-  (java.sql.Timestamp. (now-ts)))
+(defn make-ts [ts] (java.sql.Timestamp. ts))
+(def make-ts-sec (comp make-ts (partial * 1000)))
+(def now "Return current time" (comp make-ts now-ts))
 
 (defn inc-ts
   [ts tf & {:keys [mul] :or {mul 1}}]
@@ -180,6 +180,11 @@
           (apply f! args)
           (reset! last (+ ms t)))))))
 
+(defn make-wc
+  [item]
+  (re-pattern
+   (str "^" (str/replace item "*" "\\w+") "$")))
+
 (defn some-fn-map
   "Combines some-f n with map. (some-fn-map f coll) = (apply some-fn (map f coll))"
   [f items]
@@ -191,6 +196,14 @@
             true
             (recur (rest i)))
           false)))))
+
+(defn wildcard-checker
+  [& args]
+  (if (not-empty args)
+   (->> args
+       (map make-wc)
+       (some-fn-map (partial partial re-find)))
+    any?))
 
 (defn map-sum
   "Summarize hashmap values by key aggregation"
@@ -217,6 +230,21 @@
   (and
     (>= v a)
     (<= v b)))
+
+(def cons-nil (partial cons nil))
+(defn conj-nil [v] (concat v [nil]))
+(defn not-and [[a b]] (not (and a b)))
+
+(defn ajacent-filter [f items]
+  (sequence
+   (comp
+    (map list)
+    (filter
+     (some-fn
+      not-and
+      (partial apply f))))
+   (cons-nil items)
+   (conj-nil items)))
 
 (defn exec!
   [& args]
