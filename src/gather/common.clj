@@ -78,6 +78,8 @@
 
 (defn ts-to-seconds [ts] (long (/ (ts-to-long ts) 1000)))
 
+(defn str-some [& args] (apply str (filter some? args)))
+
 (defn ts-str
   [ts & args]
   (if (nil? ts)
@@ -103,6 +105,9 @@
     (= wc "*") (constantly true)
     (str/starts-with? wc "*") (fn [s] (str/ends-with? s (subs wc 1)))
     ))
+
+(defn re-rest [pat] (comp rest (partial re-find pat)))
+(defn re-one [pat s] (second (re-find pat s)))
 
 (defn get-table-name
   "Get table name for trades or depths"
@@ -274,11 +279,10 @@
             ]
    :db-url ["-u" "--db-url URL" "Clickhouse database url" :default nil]
    ;; A non-idempotent option (:default is applied first)
-  ; ["-v" nil "Verbosity level"
-  ;  :id :verbosity
-  ;  :default 0
-  ;  :update-fn inc] ; Prior to 0.4.1, you would have to use:
-                   ;; :assoc-fn (fn [m k _] (update-in m [k] inc))
+   :verbosity ["-v" nil "Verbosity level"
+               :id :verbosity
+               :default 0
+               :update-fn inc]
    ;; A boolean option defaulting to nil
    :help ["-h" "--help"]})
 

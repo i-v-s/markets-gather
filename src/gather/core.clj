@@ -50,8 +50,8 @@
   [module & args]
   (case module
     "gather" (-> args (c/parse-options :config :help) :options :config main)
-    "check" (let [{{url :db-url config :config} :options args :arguments} (c/parse-options args :config :db-url :help)]
-             (ck/-main (or url (-> config cfg/load-json :clickhouse :url)) args))
+    "check" (let [{{url :db-url config :config verbosity :verbosity} :options args :arguments} (c/parse-options args :config :db-url :help :verbosity)]
+             (ck/-main (or url (-> config cfg/load-json :clickhouse :url)) args verbosity))
     "drop" (let [{{url :db-url config :config} :options args :arguments} (c/parse-options args :config :db-url :help)]
              (drop/-main (or url (-> config cfg/load-json :clickhouse :url)) args))
     "backup" (apply backup/-main args)

@@ -1,6 +1,7 @@
 (ns gather.ch
-  (:require     [clojure.string :as str]
-                [gather.common :as c]))
+  (:require [clojure.string :as str]
+            [gather.common :as c]
+            [gather.sql :as sql]))
 
 (import java.sql.DriverManager)
 
@@ -37,7 +38,10 @@
 (defmethod exec! com.github.housepower.jdbc.statement.ClickHouseStatement
   [stmt query]
   (try
-    (.executeQuery stmt query)
+    (.executeQuery stmt
+                   (if (sql/query? query)
+                     (:sql query)
+                     query))
     (catch Exception e
       (println "\nException during SQL execution. Query was:")
       (println query)
@@ -46,7 +50,7 @@
 (defmethod exec! com.github.housepower.jdbc.ClickHouseConnection [c query]
   (exec! (.createStatement c) query))
 
-(defn get-metadata
+(defn get-metadata'
   [result-set]
   (let [md (.getMetaData result-set)]
     (->> md
@@ -58,9 +62,18 @@
             [(->> i (.getColumnLabel md) keyword)
              (.getColumnTypeName md i)])))))
 
+(defn get-metadata
+  [result-set]
+  (let [md (.getMetaData result-set)
+        r (->> md .getColumnCount inc (range 1))]
+    {:names (map #(.getColumnLabel md %) r)
+     :types (map #(.getColumnTypeName md %) r)}))
+
 (defmulti read-result-set (fn [t _ _] t))
 (defmethod read-result-set "UInt8" [_ rs j] (.getLong rs j))
 (defmethod read-result-set "UInt32" [_ rs j] (.getLong rs j))
+(defmethod read-result-set "Float32" [_ rs j] (.getFloat rs j))
+(defmethod read-result-set "Float64" [_ rs j] (.getDouble rs j))
 (defmethod read-result-set "String" [_ rs j] (.getString rs j))
 (defmethod read-result-set "Nullable(DateTime)" [_ rs j] (.getTimestamp rs j))
 (defmethod read-result-set "DateTime" [_ rs j] (.getTimestamp rs j))
@@ -83,37 +96,44 @@
             (read-result-set t result-set j))))))
 
 (defn fetch-one
-  [result-set]
-  (let [md (.getMetaData result-set)]
-    (.next result-set)
-    (for [i (range 1 (inc (.getColumnCount md)))]
-      (read-result-set (.getColumnTypeName md i) result-set i))))
+  ([result-set]
+   (let [md (.getMetaData result-set)]
+     (.next result-set)
+     (for [i (range 1 (inc (.getColumnCount md)))]
+       (read-result-set (.getColumnTypeName md i) result-set i))))
+  ([conn query]
+   (fetch-one (exec! conn query))))
 
-(defn current-db
-  [c]
-  (->> "SELECT currentDatabase()"
-       (exec! c)
-       fetch-one
-       first))
+(defn fetcher
+  [row-fn result-set]
+  (let [{names :names types :types} (get-metadata result-set)]
+    (for [_ (range) :while (.next result-set)]
+      (row-fn names
+       (for [[i t] (map-indexed vector types)]
+         (read-result-set t result-set (inc i)))))))
 
 (defn fetch-all-hm
   "Fetch all rows from result-set"
-  [result-set]
-  (let [md (get-metadata result-set)]
-    (for [_ (range) :while (.next result-set)]
-      (fetch-row-hm result-set md))))
+  ([result-set]
+   (let [md (get-metadata' result-set)]
+     (for [_ (range) :while (.next result-set)]
+       (fetch-row-hm result-set md))))
+  ([conn query]
+   (fetch-all-hm (exec! conn query))))
 
 (defn fetch-all
   "Fetch all rows from result-set"
-  [result-set]
-  (let [md (get-metadata result-set)]
-    (for [_ (range) :while (.next result-set)]
-      (fetch-row result-set md))))
+  ([result-set] (fetcher (fn [_ v] (into [] v)) result-set))
+  ([conn query] (fetch-all (exec! conn query))))
 
 (defn fetch-tables
   "Fetch all table names from current DB"
   [c]
-  (->> "SHOW TABLES" (exec! c) fetch-all-hm (map :name)))
+  (->> "SHOW TABLES" (fetch-all-hm c) (map :name)))
+
+(defn current-db
+  [c]
+  (->> "SELECT currentDatabase()" (fetch-one c) first))
 
 (defn descr-to-rec
   [{name :name type :type def-expr :default_expression codec :codec_expression}]
@@ -126,8 +146,14 @@
         (filter not-empty)
     (str/join " " ))])
 
+(defn exec-describe-table! [c table]
+  (->> table (str "DESCRIBE TABLE ") (exec! c)))
+
 (defn describe-table [c table]
-  (->> table (str "DESCRIBE TABLE ") (exec! c) fetch-all-hm (map descr-to-rec) (into {})))
+  (->> table (exec-describe-table! c) fetch-all-hm (map descr-to-rec) (into {})))
+
+(defn fetch-cols [c table]
+  (->> table (exec-describe-table! c) fetch-all (map first)))
 
 (defn show-table [c table]
   (->> table (str "SHOW CREATE TABLE ") (exec! c) fetch-all-hm first :statement))
