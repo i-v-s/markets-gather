@@ -1,6 +1,7 @@
 (ns gather.storage
   (:require
    [clojure.string :as str]
+   [clojure.tools.logging :refer [trace debug warn error]]
    [gather.ch :as ch]
    [gather.common :as c]))
 
@@ -182,7 +183,7 @@
     (try
       (ch/insert-many! conn (market-insert-query (.table cache) tp) rows)
       (catch Exception e
-        (println "\nException on insert" market-name pair tp "- repushing...")
+        (error "Exception on insert" market-name pair tp "- repushing...")
         (repush! cache rows)
         (throw e)))))
 
@@ -281,10 +282,12 @@
       (if (or (nil? start') (< start' end))
         (let [candles
               (c/with-retry 5
-                ;(println "Trying get " (:name market) pair tf (c/ts-str start') (c/ts-str end))
+                ;(trace "Trying get " (:name market) pair tf (c/ts-str start') (c/ts-str end))
                 (get-candles market pair tf start' end))]
-          (when (empty? candles)
-            (println "\nWarning get-candles-batch: no data received" (:name market) pair tf (c/ts-str start') (c/ts-str end)))
+          (if (empty? candles)
+            (warn "get-candles-batch: no data received" (:name market) pair tf (c/format-interval tf start' end))
+            (trace "get-candles-batch requested:" (:name market) pair tf (c/format-interval tf start' end)
+                   "received:" (c/format-interval tf (ffirst candles) (first (last candles))) "count:" (count candles)))
           candles)
         []))))
 
@@ -354,7 +357,7 @@
                        (if (not-empty @starts) (apply min (map second @starts)) nil)))
           current (c/dec-ts (c/now-ts) tf)]
       (while (or (nil? @start) (< @start current))
-        (println "\nGrabbing candles from" market-name quote tf (if @start (c/ts-str @start) "*"))
+        (debug "Grabbing candles from" market-name quote tf (if @start (c/ts-str @start) "*"))
         (reset!
          start
          (grab-candles! conn market quote tf :start @start :starts @starts))))

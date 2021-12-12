@@ -1,19 +1,19 @@
 (ns gather.binance
   (:require
-    [clojure.string :as str]
-    [clojure.walk :as w]
-    [clojure.data.json :as json]
-    [manifold.stream :as s]
-    [aleph.http :as http]
-    [gather.common :as c]
-    [gather.storage :as sg]
-  ))
+   [clojure.string :as str]
+   [clojure.walk :as w]
+   [clojure.data.json :as json]
+   [clojure.tools.logging :refer [debug info warn error]]
+   [manifold.stream :as s]
+   [aleph.http :as http]
+   [gather.common :as c]
+   [gather.storage :as sg]))
 
 (def binance-intervals
   "Chart intervals: (m)inutes, (h)ours, (d)ays, (w)eeks, (M)onths"
   ["1m" "3m" "5m" "15m" "30m" "1h" "2h" "4h" "6h" "8h" "12h" "1d" "3d" "1w" "1M"])
 
-(def binance-candles-limit 1000)
+(def binance-candles-limit 500)
 
 (defn de-hyphen
   "Remove hyphens from string"
@@ -145,9 +145,6 @@
 (defn transform-depths-rest [data]
   (into {} (for [[k v] data] [(str (first k)) v])))
 
-(defn print-pass
-  [v] (println "PASS:" v) v)
-
 (defn get-current-depths
   "Get depth from REST"
   [pairs]
@@ -196,7 +193,7 @@
           (let [{ask "a" bid "b" _u1 "U" _time "E"} data
                 {ss-ask "a" ss-bid "b"} ss
                 left (count @snapshot)]
-            ;(println "\nBinance mix-depth: pair" pair "time" (c/ts-str _time) "last" last-id "U" _u1 "u" u2 "left" left)
+            (debug "mix-depth: pair" pair "time" (c/ts-str _time) "last" last-id "U" _u1 "u" u2 "left" left)
             (if (== 1 left)
               (reset! snapshot nil)
               (swap! snapshot dissoc pair))
@@ -225,7 +222,7 @@
                   (c/url-encode-params "wss://stream.binance.com:9443/stream" :streams)
                   http/websocket-client
                   deref)]
-      (println "Binance connected")
+      (info "Websocket connected")
       (push-recent-trades! trades pairs)
       (reset! depth-snapshot (get-current-depths pairs))
       (while true (let [chunk (json/read-str @(s/take! ws)) ; null!
@@ -241,12 +238,11 @@
                                    (if @depth-snapshot
                                      (mix-depth pair depth-snapshot data)
                                      data))
-                          (println "\nBinance: unknown stream topic" stream))
+                          (warn "Binance: unknown stream topic" stream))
                         (catch Exception e
-                          (println "\nBinance exception during chunk processing. Stream" stream "data:")
-                          (println data)
+                          (error "Сhunk processing exception. Stream" stream "data:\n" data)
                           (throw e)))
-                      (println "\nBinance: unknown stream pair" stream "pair was" pair-id))))))
+                      (warn "Binance: unknown stream pair" stream "pair was" pair-id))))))
   (get-candles [_ pair interval start end]
     (get-candles pair interval :start start :end end)))
 

@@ -17,3 +17,5 @@ pom.xml.asc
 *~
 config.json
 debug.json
+/log
+/resources/log4j.properties

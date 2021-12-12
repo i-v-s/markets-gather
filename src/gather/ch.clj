@@ -1,5 +1,6 @@
 (ns gather.ch
   (:require [clojure.string :as str]
+            [clojure.tools.logging :refer [info warn]]
             [gather.common :as c]
             [gather.sql :as sql]))
 
@@ -43,8 +44,7 @@
                      (:sql query)
                      query))
     (catch Exception e
-      (println "\nException during SQL execution. Query was:")
-      (println query)
+      (warn "Exception during SQL execution. Query was:\n" query)
       (throw e))))
 
 (defmethod exec! com.github.housepower.jdbc.ClickHouseConnection [c query]
@@ -113,7 +113,7 @@
          (read-result-set t result-set (inc i)))))))
 
 (defn fetch-all-hm
-  "Fetch all rows from result-set"
+  "Fetch all rows from result-set into hashmaps"
   ([result-set]
    (let [md (get-metadata' result-set)]
      (for [_ (range) :while (.next result-set)]
@@ -122,7 +122,7 @@
    (fetch-all-hm (exec! conn query))))
 
 (defn fetch-all
-  "Fetch all rows from result-set"
+  "Fetch all rows from result-set into vectors"
   ([result-set] (fetcher (fn [_ v] (into [] v)) result-set))
   ([conn query] (fetch-all (exec! conn query))))
 
@@ -259,7 +259,7 @@
                   cols-check' (map (juxt identity cols desc) cols-check)
                   cols-bad (filter (fn [[_ a b]] (not= a b)) cols-check')]]
       (when (not-empty cols-bad)
-        (println "Warning ch/ensure-tables! - column types mismatch. Table" tab-name "cols" cols-bad))
+        (warn "ch/ensure-tables! - column types mismatch. Table" tab-name "cols" cols-bad))
       (when (not-empty cols-create)
         (->> cols-create
              (select-keys cols)
@@ -267,7 +267,7 @@
              (str/join ", ")
              (str "ALTER TABLE " tab-name " ")
              (exec! conn))
-        (println "Info ch/ensure-tables! - table" tab-name "created cols:" (str/join ", " (map name cols-create)))))))
+        (info "ch/ensure-tables! - table" tab-name "created cols:" (str/join ", " (map name cols-create)))))))
 
 (defn insert-query
   [table rec]

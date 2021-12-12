@@ -24,12 +24,6 @@
     a
     (str a " - " b)))
 
-(defmulti format-ldt (fn [tf _] (get {:1mo :1M :1M :1M :1w :1d :3d :1d :1d :1d :4h :1h :1h :1h} tf nil)))
-(defmethod format-ldt :1M [_ dt] (format "%4d-%02d" (.getYear dt) (.getValue (.getMonth dt))))
-(defmethod format-ldt :1d [_ dt] (format "%4d-%02d-%02d" (.getYear dt) (.getValue (.getMonth dt)) (.getDayOfMonth dt)))
-(defmethod format-ldt :1h [_ dt] (format "%4d-%02d-%02d %02d" (.getYear dt) (.getValue (.getMonth dt)) (.getDayOfMonth dt) (.getHour dt)))
-(defn format-ts [tf ts] (format-ldt tf (.toLocalDateTime ts)))
-
 (defn check-gaps
   [c table field ff & {:keys [render] :or {render str}}]
   (let [ts (= field "time")
@@ -72,7 +66,7 @@
        (ch/fetch-all conn)
        (apply concat)
        rest
-       (map (partial format-ts tf))
+       (map (partial c/format-ts tf))
        (partition 2)
        (map str-interval)
        ))
@@ -102,7 +96,7 @@
                (check-gaps conn table "time"
                            (fn [a b]
                              (< (+ a gap) b))
-                           :render (comp (partial format-ts tf) c/make-ts-sec)))
+                           :render (comp (partial c/format-ts tf) c/make-ts-sec)))
       (when (> verbosity 0)
         (doseq [asset-col (->> table (ch/fetch-cols conn) (filter #(str/ends-with? % "_open")) sort)]
           (println (str/upper-case (c/re-one #"(\w+)_open" asset-col)) (c/comma-join (check-asset-gaps conn table asset-col tf))))))))

@@ -1,15 +1,14 @@
 (ns gather.config
   (:require
-    [clojure.java.io :as io]
-    [clojure.data.json :as json]
-    [clojure.walk :as w]
-    [gather.common :as c]
-    [gather.storage :as sg]
-    [gather.exmo :as exmo]
-    [gather.binance :as binance]
-  )
-  (:import [gather.storage CandlesData]
-  ))
+   [clojure.java.io :as io]
+   [clojure.data.json :as json]
+   [clojure.tools.logging :refer [info warn]]
+   [clojure.walk :as w]
+   [gather.common :as c]
+   [gather.storage :as sg]
+   [gather.exmo :as exmo]
+   [gather.binance :as binance])
+  (:import [gather.storage CandlesData]))
 
 (defn exists?
   "Check if file exists"
@@ -35,7 +34,7 @@
 (defn filter-exists
   [possible message items]
   (let [[good bad] (c/group-by-contains possible items)]
-  (when (not-empty bad) (println (str message ":") bad))
+  (when (not-empty bad) (warn (str message ":") bad))
   good))
 
 (defn prepare-intervals
@@ -53,7 +52,7 @@
     :let [market (case market-key
       :exmo (exmo/create)
       :binance (binance/create)
-      (println "Unknown market:" (name market-key)))]
+      (warn "Unknown market:" (name market-key)))]
     :when (some? market)
     :let [
       all-pairs (-> market sg/get-all-pairs set)
@@ -78,7 +77,7 @@
         "config.default.json"
       ]))
     )]
-    (println "Loading config file:" to-load)
+    (info "Loading config file:" to-load)
     (-> to-load
       (must exists? "Config file not exists")
       slurp

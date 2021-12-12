@@ -86,6 +86,23 @@
     "<nil>"
     (apply str (java.sql.Timestamp. ts) args)))
 
+(defmulti format-ldt (fn [tf _] (get {:1mo :1M :1M :1M :1w :1d :3d :1d :1d :1d :4h :1h :1h :1h} tf :1m)))
+(defmethod format-ldt :1M [_ dt] (format "%4d-%02d" (.getYear dt) (.getValue (.getMonth dt))))
+(defmethod format-ldt :1d [_ dt] (format "%4d-%02d-%02d" (.getYear dt) (.getValue (.getMonth dt)) (.getDayOfMonth dt)))
+(defmethod format-ldt :1h [_ dt] (format "%4d-%02d-%02d %02d" (.getYear dt) (.getValue (.getMonth dt)) (.getDayOfMonth dt) (.getHour dt)))
+(defmethod format-ldt :1m [_ dt] (format "%4d-%02d-%02d %02d:%02d"
+                                         (.getYear dt) (.getValue (.getMonth dt)) (.getDayOfMonth dt) (.getHour dt) (.getMinute dt)))
+
+(defmulti format-ts (fn [_ ts] (type ts)))
+(defmethod format-ts java.sql.Timestamp [tf ts] (format-ldt tf (.toLocalDateTime ts)))
+(defmethod format-ts Long [tf ts] (format-ldt tf (.toLocalDateTime (java.sql.Timestamp. ts))))
+
+(defn format-interval
+  [tf a b]
+  (if (= a b)
+    (format-ts tf a)
+    (str (format-ts tf a) " - " (format-ts tf b))))
+
 (defn http-get-json
   "Get JSON data with HTTP GET request"
   [url & params]

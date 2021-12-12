@@ -1,6 +1,7 @@
 (ns gather.core
   (:require
    [clojure.core.async :as a]
+   [clojure.tools.logging :refer [info error]]
    [gather.config :as cfg]
    [gather.ch :as ch]
    [gather.storage :as sg]
@@ -14,7 +15,7 @@
   "Worker, that periodicaly inserts rows from raw buffers into Clickhouse"
   [markets {db-url :url}]
   (let [conn (ch/connect db-url)]
-    (println (str "\n" (c/now) " Started Core"))
+    (info "Started Core")
     (loop []
       (Thread/sleep 2000)
       (sg/insert-from-raw-buffers! markets conn)
@@ -26,7 +27,7 @@
   (sg/grab-all-candles!
    (ch/connect db-url)
    market)
-  (println "\nCandle grabbing completed"))
+  (info "Candle grabbing completed for market" (:name market)))
 
 (defn main
   "Entry point"
@@ -35,15 +36,17 @@
     (ch/create-db! (:url db-cfg))
     (run! (partial sg/ensure-tables! db-cfg) markets)
     (doseq [market markets]
-      (c/forever-loop #(do
-        (println (str "\n" (c/now) " Starting " (:name market) " WS"))
-        (sg/gather-ws-loop! market :info))
-      :title (str (:name market) " WS"))
+      (c/forever-loop
+       #(do
+          (info "Starting" (:name market) "WS")
+          (sg/gather-ws-loop! market :info))
+       :title (str (:name market) " WS"))
       (a/thread
-       (candles-insert-loop! market db-cfg))
-      )
-    (c/try-loop (partial raw-insert-loop! markets db-cfg) :title "Core" :delay 10000)
-  ))
+        (try
+          (candles-insert-loop! market db-cfg)
+          (catch Exception e
+            (error e "Market" (:name market) "- exception in candles-insert-loop!")))))
+    (c/try-loop (partial raw-insert-loop! markets db-cfg) :title "Core" :delay 10000)))
 
 (defn -main
   "Start with params"
