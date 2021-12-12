@@ -274,7 +274,11 @@
 (defn get-candles-batch
   [market quote assets tf & {:keys [start starts] :or {starts {}}}]
   (let [{limit :candles-limit} market
-        end (if start (c/inc-ts start tf :mul limit) nil)]
+        end (if start
+              (min
+               (c/now-ts)
+               (c/inc-ts start tf :mul (dec limit)))
+              nil)]
     (for [asset assets
           :let
           [pair (str asset "-" quote)

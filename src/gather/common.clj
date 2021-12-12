@@ -178,7 +178,7 @@
 (defn now-ts [] (System/currentTimeMillis))
 (defn make-ts [ts] (java.sql.Timestamp. ts))
 (def make-ts-sec (comp make-ts (partial * 1000)))
-(def now "Return current time" (comp make-ts now-ts))
+(def now "Return current time as java.sql.Timestamp" (comp make-ts now-ts))
 
 (defn inc-ts
   [ts tf & {:keys [mul] :or {mul 1}}]
