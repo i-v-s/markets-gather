@@ -47,47 +47,42 @@
 
 (defn load-markets
   [markets-config]
-  (for [
-    [market-key {raw-pairs :raw-pairs candles :candles cpf :candle-pair-filter}] markets-config
-    :let [market (case market-key
-      :exmo (exmo/create)
-      :binance (binance/create)
-      (warn "Unknown market:" (name market-key)))]
-    :when (some? market)
-    :let [
-      all-pairs (-> market sg/get-all-pairs set)
-      filtered-raw-pairs (filter-exists all-pairs (str "Unknown pairs for market " (:name market)) raw-pairs)
-          filtered-candle-pairs (if cpf (filter (partial re-matches (re-pattern cpf)) all-pairs) all-pairs)]]
-    (assoc market
-      :candles (if candles (CandlesData.
-        (group-pairs filtered-candle-pairs)
-        (prepare-intervals market candles)
-      ) nil)
-      :raw (sg/make-raw-data (:name market) filtered-raw-pairs)
-  )))
+  (for [[market-key {raw-pairs :raw-pairs candles :candles cq :candle-quotes}] markets-config
+        :let [market (case market-key
+                       :exmo (exmo/create)
+                       :binance (binance/create)
+                       (warn "Unknown market:" (name market-key)))]
+        :when (some? market)
+        :let [all-pairs (-> market sg/get-all-pairs set)
+              filtered-raw-pairs (filter-exists all-pairs (str "Unknown pairs for market " (:name market)) raw-pairs)
+              groupped-pairs (group-pairs all-pairs)
+              filtered-candle-pairs (if cq (select-keys groupped-pairs cq) groupped-pairs)]]
+    (do
+      (when (and candles (empty? filtered-candle-pairs))
+        (warn "No pairs found for candle loading"))
+      (assoc market
+             :candles (if (and candles (not-empty filtered-candle-pairs))
+                        (CandlesData. filtered-candle-pairs (prepare-intervals market candles))
+                        nil)
+             :raw (sg/make-raw-data (:name market) filtered-raw-pairs)))))
 
 (defn load-json
   "Reads and parse config.json data"
   [file-name]
   (let [to-load
-    (if (some? file-name)
-      file-name
-      (first (filter exists? [
-        "config.json"
-        "config.default.json"
-      ]))
-    )]
+        (if (some? file-name)
+          file-name
+          (first (filter exists? ["config.json"
+                                  "config.default.json"])))]
     (info "Loading config file:" to-load)
     (-> to-load
-      (must exists? "Config file not exists")
-      slurp
-      json/read-str
-      w/keywordize-keys
-    )
-  ))
+        (must exists? "Config file not exists")
+        slurp
+        json/read-str
+        w/keywordize-keys)))
 
 (defn load-config
   [& [file-name]]
-  (let [{db :clickhouse markets :markets} (load-json file-name)] {
-    :clickhouse db
-    :markets (load-markets markets)}))
+  (let [{db :clickhouse markets :markets} (load-json file-name)]
+    {:clickhouse db
+     :markets (load-markets markets)}))
