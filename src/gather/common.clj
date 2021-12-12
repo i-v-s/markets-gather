@@ -96,6 +96,7 @@
 (defmulti format-ts (fn [_ ts] (type ts)))
 (defmethod format-ts java.sql.Timestamp [tf ts] (format-ldt tf (.toLocalDateTime ts)))
 (defmethod format-ts Long [tf ts] (format-ldt tf (.toLocalDateTime (java.sql.Timestamp. ts))))
+(defmethod format-ts nil [_ _] (str "<nil>"))
 
 (defn format-interval
   [tf a b]

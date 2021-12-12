@@ -325,6 +325,9 @@
 
 (defn insert-candle-rows!
   [conn table assets rows]
+  (trace "Inserting into" table (count rows) "row(s);"
+         "interval" (c/format-interval :1m (ffirst rows) (first (last rows)))
+         "assets:" (count assets) assets)
   (ch/insert-many!
    conn
    (ch/insert-query
@@ -344,6 +347,7 @@
         last-ts (-> rows last first)]
     (->> rows
          (group-candle-rows)
+         (sort-by (comp first last second))
          (map (partial apply insert-candle-rows! conn table))
          doall)
     (if last-ts

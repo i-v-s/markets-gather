@@ -22,7 +22,8 @@
                  [hikari-cp "2.13.0"]
                  [org.slf4j/slf4j-log4j12 "1.7.32"]
                  [org.slf4j/slf4j-api "1.7.32"]]
-  :jvm-opts ["-Dclojure.tools.logging.factory=clojure.tools.logging.impl/log4j-factory"]
+  :jvm-opts ["-Dclojure.tools.logging.factory=clojure.tools.logging.impl/log4j-factory"
+             "-Xmx6G"]
   :main ^:skip-aot gather.core
   :target-path "target/%s"
   :profiles
