@@ -5,6 +5,7 @@
    [clojure.java.shell :as sh]
    [clojure.data.json :as json]
    [clojure.set :refer [union]]
+   [clojure.tools.logging :refer [warn]]
    [clojure.tools.cli :refer [parse-opts]]
    [clojure.stacktrace :refer [print-stack-trace]]
    [byte-streams :as bs]
@@ -157,7 +158,7 @@
             (catch clojure.lang.ExceptionInfo ~e
               (if-let [~wait (-> ~e ex-data :retry-after)]
                 (do
-                  (println (str "\nException (tries left " ~left "): " (ex-message ~e)))
+                  (warn (str "Exception (tries left " ~left "): " (ex-message ~e)))
                   (if (pos? ~left)
                     (do
                       (Thread/sleep ~wait)

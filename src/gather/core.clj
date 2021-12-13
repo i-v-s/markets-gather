@@ -32,6 +32,7 @@
 (defn main
   "Entry point"
   [& [config-file-name]]
+  (info "Gather started")
   (let [{db-cfg :clickhouse markets :markets} (cfg/load-config config-file-name)]
     (ch/create-db! (:url db-cfg))
     (run! (partial sg/ensure-tables! db-cfg) markets)

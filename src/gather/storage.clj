@@ -272,28 +272,22 @@
       nil)))
 
 (defn get-candles-batch
-  [market quote assets tf & {:keys [start starts] :or {starts {}}}]
-  (let [{limit :candles-limit} market
-        end (if start
-              (min
-               (c/now-ts)
-               (c/inc-ts start tf :mul (dec limit)))
-              nil)]
-    (for [asset assets
-          :let
-          [pair (str asset "-" quote)
-           start' (c/ts-max start (starts asset))]]
-      (if (or (nil? start') (< start' end))
-        (let [candles
-              (c/with-retry 5
+  [market quote assets tf & {:keys [start starts end] :or {starts {}}}]
+  (for [asset assets
+        :let
+        [pair (str asset "-" quote)
+         start' (c/ts-max start (starts asset))]]
+    (if (or (nil? start') (< start' end))
+      (let [candles
+            (c/with-retry 5
                 ;(trace "Trying get " (:name market) pair tf (c/ts-str start') (c/ts-str end))
-                (get-candles market pair tf start' end))]
-          (if (empty? candles)
-            (warn "get-candles-batch: no data received" (:name market) pair tf (c/format-interval tf start' end))
-            (trace "get-candles-batch requested:" (:name market) pair tf (c/format-interval tf start' end)
-                   "received:" (c/format-interval tf (ffirst candles) (first (last candles))) "count:" (count candles)))
-          candles)
-        []))))
+              (get-candles market pair tf start' end))]
+        (if (empty? candles)
+          (warn "get-candles-batch: no data received" (:name market) pair tf (c/format-interval tf start' end))
+          (trace "get-candles-batch requested:" (:name market) pair tf (c/format-interval tf start' end)
+                 "received:" (c/format-interval tf (ffirst candles) (first (last candles))) "count:" (count candles)))
+        candles)
+      [])))
 
 (defn candle-batch-to-rows
   "Returns rows in format '(long time, assets, data)"
@@ -336,23 +330,18 @@
    rows))
 
 (defn grab-candles!
-  "Return next ts"
   [conn market quote tf & args]
   (let [assets (-> market :candles :pairs (get quote))
         table (get-candle-table-name (:name market) quote tf)
         current (c/dec-ts (c/now-ts) tf)
         rows (->> (apply get-candles-batch market quote assets tf args)
                   (candle-batch-to-rows assets)
-                  (filter (comp (partial > current) first)))
-        last-ts (-> rows last first)]
+                  (filter (comp (partial > current) first)))]
     (->> rows
          (group-candle-rows)
          (sort-by (comp first last second))
          (map (partial apply insert-candle-rows! conn table))
-         doall)
-    (if last-ts
-      (c/inc-ts last-ts tf)
-      (c/now-ts))))
+         doall)))
 
 (defn grab-all-candles!
   [conn market]
@@ -362,12 +351,15 @@
           tf tfs]
     (let [start (atom (or
                        (get-next-candle conn market quote tf)
-                       (if (not-empty @starts) (apply min (map second @starts)) nil)))
+                       (if (not-empty @starts) (apply min (vals @starts)) nil)))
           current (c/dec-ts (c/now-ts) tf)]
       (while (or (nil? @start) (< @start current))
         (debug "Grabbing candles from" market-name quote tf (if @start (c/ts-str @start) "*"))
-        (reset!
-         start
-         (grab-candles! conn market quote tf :start @start :starts @starts))))
+        (let [end (and @start
+                       (min
+                        (c/inc-ts @start tf :mul (-> market :candles-limit dec))
+                        (c/now-ts)))]
+          (grab-candles! conn market quote tf :start @start :starts @starts :end end)
+          (reset! start (if end (c/inc-ts end tf) current)))))
     (when (not= tf (last tfs))
       (reset! starts (into {} (get-candle-starts conn market quote tf))))))
