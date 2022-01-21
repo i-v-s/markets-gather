@@ -148,13 +148,18 @@
 (defn get-current-depths
   "Get depth from REST"
   [pairs]
-  (into {}
-        (for [pair pairs]
-          [pair
-           (->> pair
-                depth-rest-query
-                c/http-get-json
-                transform-depths-rest)])))
+  (for [pair pairs]
+    [pair
+     (->> pair
+          depth-rest-query
+          c/http-get-json
+          transform-depths-rest)]))
+
+(defn get-current-spreads
+  [pairs]
+  (for [[pair {a "a" b "b"}] (get-current-depths pairs)
+        :let [[a b] (map (comp #(Double/parseDouble %) ffirst) [a b])]]
+    [pair (/ (- a b) (+ a b) 2)]))
 
 (defn get-candles
   "Get candles by REST"
@@ -224,7 +229,7 @@
                   deref)]
       (info "Websocket connected")
       (push-recent-trades! trades pairs)
-      (reset! depth-snapshot (get-current-depths pairs))
+      (reset! depth-snapshot (into {} (get-current-depths pairs)))
       (while true (let [chunk (json/read-str @(s/take! ws)) ; null!
                         {stream "stream" data "data"} chunk
                         [pair-id topic] (parse-topic stream)

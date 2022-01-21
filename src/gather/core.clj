@@ -1,5 +1,6 @@
 (ns gather.core
   (:require
+   [clojure.java.io :as io]
    [clojure.core.async :as a]
    [clojure.tools.logging :refer [info error]]
    [gather.config :as cfg]
@@ -9,7 +10,8 @@
    [gather.backup :as backup]
    [gather.restore :as restore]
    [gather.common :as c]
-   [gather.check :as ck]))
+   [gather.check :as ck]
+   [gather.binance :as binance]))
 
 (defn raw-insert-loop!
   "Worker, that periodicaly inserts rows from raw buffers into Clickhouse"
@@ -55,8 +57,14 @@
   (case module
     "gather" (-> args (c/parse-options :config :help) :options :config main)
     "check" (let [{{url :db-url config :config verbosity :verbosity} :options args :arguments} (c/parse-options args :config :db-url :help :verbosity)]
-             (ck/-main (or url (-> config cfg/load-json :clickhouse :url)) args verbosity))
+              (ck/-main (or url (-> config cfg/load-json :clickhouse :url)) args verbosity))
     "drop" (let [{{url :db-url config :config} :options args :arguments} (c/parse-options args :config :db-url :help)]
              (drop/-main (or url (-> config cfg/load-json :clickhouse :url)) args))
     "backup" (apply backup/-main args)
-    "restore" (apply restore/-main args)))
+    "restore" (apply restore/-main args)
+    "spreads" (let [ps (sg/get-all-pairs (binance/create))]
+                (doseq [[p s] (binance/get-current-spreads ps)]
+                  (println p s)
+                  (with-open [w (io/writer "spreads.txt" :append true)]
+                    (.write w (str (pr-str [p s]) "\n"))))
+                (println "Completed"))))

@@ -19,3 +19,4 @@ config.json
 debug.json
 /log
 /resources/log4j.properties
+spreads.txt
