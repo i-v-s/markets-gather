@@ -159,7 +159,7 @@
   [pairs]
   (for [[pair {a "a" b "b"}] (get-current-depths pairs)
         :let [[a b] (map (comp #(Double/parseDouble %) ffirst) [a b])]]
-    [pair (/ (- a b) (+ a b) 2)]))
+    [pair (/ (- a b) 0.5 (+ a b))]))
 
 (defn get-candles
   "Get candles by REST"
