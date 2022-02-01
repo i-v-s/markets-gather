@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as str]
    [clojure.core.async :as a]
+   [clojure.java.io :as io]
    [clojure.java.shell :as sh]
    [clojure.data.json :as json]
    [clojure.set :refer [union]]
@@ -290,6 +291,16 @@
 
 (defn select-values [map ks]
   (reduce #(conj %1 (map %2)) [] ks))
+
+(defn exists?
+  "Check if file exists"
+  [file-name]
+  (-> file-name io/as-file .exists))
+
+(defn remove-dir!
+  [& dirs]
+  (when (not-empty dirs)
+    (apply exec! "rm" "-r" dirs)))
 
 (def cli-options
   {:config ["-c" "--config CONFIG" "Config file name" :default nil

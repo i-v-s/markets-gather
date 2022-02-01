@@ -1,19 +1,12 @@
 (ns gather.config
-  (:require
-   [clojure.java.io :as io]
-   [clojure.data.json :as json]
-   [clojure.tools.logging :refer [info warn]]
-   [clojure.walk :as w]
-   [gather.common :as c]
-   [gather.storage :as sg]
-   [gather.exmo :as exmo]
-   [gather.binance :as binance])
+  (:require [clojure.data.json :as json]
+            [clojure.tools.logging :refer [info warn]]
+            [clojure.walk :as w]
+            [gather.common :as c]
+            [gather.storage :as sg]
+            [gather.exmo :as exmo]
+            [gather.binance :as binance])
   (:import [gather.storage CandlesData]))
-
-(defn exists?
-  "Check if file exists"
-  [file-name]
-  (-> file-name io/as-file .exists))
 
 (defn must
   [value pred message]
@@ -72,11 +65,11 @@
   (let [to-load
         (if (some? file-name)
           file-name
-          (first (filter exists? ["config.json"
+          (first (filter c/exists? ["config.json"
                                   "config.default.json"])))]
     (info "Loading config file:" to-load)
     (-> to-load
-        (must exists? "Config file not exists")
+        (must c/exists? "Config file not exists")
         slurp
         json/read-str
         w/keywordize-keys)))
