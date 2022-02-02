@@ -81,10 +81,12 @@
                 (doseq [path storages
                         :let [[g r t] (re-find #"^(.+/)store/(\w+/[\w\-]+/)$" path)
                               store (str r "shadow/backup/store/")
-                              temp (str store table)]]
-                  (c/exec! "mv" (str store t) temp)
-                  (when (= path (first storages))
-                    (spit (str temp "/create.sql") (ch/show-table conn (str db "." table))))
+                              source (str store t)
+                              temp (str store table)]
+                        :when (c/exists? source)]
+                  (assert g (str "Path parsing error: " path))
+                  (c/exec! "mv" source temp)
+                  (spit (str temp "/create.sql") (ch/show-table conn (str db "." table))) ; TODO!
                   (pack-target! store table result)))
               (println "Remove shadows")
               (apply c/remove-dir! (filter c/exists? shadows))
