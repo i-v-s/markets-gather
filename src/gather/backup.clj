@@ -77,12 +77,12 @@
                   (freeze conn db table)))
               (println "Pack to" result)
               (doseq [[table storages] storage]
-                (println "Packing " table "from" (c/comma-join storages))
+                (println "Packing" table "from" (c/comma-join storages))
                 (doseq [path storages
                         :let [[g r t] (re-find #"^(.+/)store/(\w+/[\w\-]+/)$" path)
                               store (str r "shadow/backup/store/")
                               temp (str store table)]]
-                  (sh/sh "mv" (str store t) temp)
+                  (c/exec! "mv" (str store t) temp)
                   (when (= path (first storages))
                     (spit (str temp "/create.sql") (ch/show-table conn (str db "." table))))
                   (pack-target! store table result)))

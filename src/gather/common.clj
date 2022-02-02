@@ -274,7 +274,11 @@
 (defn exec!
   [& args]
   (let [{exit :exit err :err out :out} (apply sh/sh args)]
-    (if (not= exit 0) (throw (Exception. err)) out)))
+    (if (not= exit 0)
+      (do
+        (apply println "Command was:" args)
+        (throw (Exception. err)))
+      out)))
 
 (defn pwd "Current directory" [] (-> "pwd" exec! str/trim))
 
