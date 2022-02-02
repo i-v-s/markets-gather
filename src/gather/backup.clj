@@ -90,4 +90,5 @@
               (apply c/remove-dir! (filter c/exists? shadows))
               (println "Completed")
               (catch Exception e
-                (println "\nException:" (.getMessage e))))))))))
+                (println "\nException:" (.getMessage e)))))
+          (System/exit 0))))))
