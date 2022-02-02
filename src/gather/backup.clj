@@ -77,7 +77,7 @@
                   (freeze conn db table)))
               (println "Pack to" result)
               (doseq [[table storages] storage]
-                (println "Packing " table)
+                (println "Packing " table "from" (c/comma-join storages))
                 (doseq [path storages
                         :let [[g r t] (re-find #"^(.+/)store/(\w+/[\w\-]+/)$" path)
                               store (str r "shadow/backup/store/")
