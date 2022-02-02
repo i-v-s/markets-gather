@@ -60,7 +60,8 @@
               (ck/-main (or url (-> config cfg/load-json :clickhouse :url)) args verbosity))
     "drop" (let [{{url :db-url config :config} :options args :arguments} (c/parse-options args :config :db-url :help)]
              (drop/-main (or url (-> config cfg/load-json :clickhouse :url)) args))
-    "backup" (apply backup/-main args)
+    "backup" (let [{{url :db-url config :config} :options args :arguments} (c/parse-options args :config :db-url :help)]
+               (backup/-main (or url (-> config cfg/load-json :clickhouse :url)) args))
     "restore" (apply restore/-main args)
     "spreads" (let [ps (sg/get-all-pairs (binance/create))]
                 (doseq [[p s] (binance/get-current-spreads ps)]
