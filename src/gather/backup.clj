@@ -76,7 +76,8 @@
                   (apply freeze conn db table (filter p-test parts))
                   (freeze conn db table)))
               (println "Pack to" result)
-              (doseq [[table storages] storage]
+              (doseq [[table storages] storage
+                      :let [query (ch/show-table conn (str db "." table))]]
                 (println "Packing" table "from" (c/comma-join storages))
                 (doseq [path storages
                         :let [[g r t] (re-find #"^(.+/)store/(\w+/[\w\-]+/)$" path)
@@ -86,11 +87,11 @@
                         :when (c/exists? source)]
                   (assert g (str "Path parsing error: " path))
                   (c/exec! "mv" source temp)
-                  (spit (str temp "/create.sql") (ch/show-table conn (str db "." table))) ; TODO!
+                  (spit (str temp "/create.sql") query) ; TODO!
                   (pack-target! store table result)))
               (println "Remove shadows")
               (apply c/remove-dir! (filter c/exists? shadows))
               (println "Completed")
               (catch Exception e
                 (println "\nException:" (.getMessage e)))))
-          (System/exit 0))))))
+          (c/exit!))))))

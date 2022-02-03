@@ -271,6 +271,10 @@
    (cons-nil items)
    (conj-nil items)))
 
+(defn exit!
+  ([code] (System/exit code))
+  ([] (System/exit 0)))
+
 (defn exec!
   [& args]
   (let [{exit :exit err :err out :out} (apply sh/sh args)]
