@@ -285,7 +285,7 @@
 (defn ls [& args] (str/split-lines (apply exec! "ls" args)))
 
 (defn extract! [archive destination]
-  (exec! "tar" "-xvf" archive :dir destination))
+  (exec! "tar" "-xvf" archive "-C" destination))
 
 (defn mv! [dst & src]
   (apply exec! "mv" "-t" dst src))
