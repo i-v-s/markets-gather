@@ -13,7 +13,7 @@
 
 (defn parse-candle
   [table-name]
-  (let [[_ market quote tf'] (re-find #"^([a-z0-9]+)_([a-z0-9]+)_([a-z0-9]+)_candles$" table-name)
+  (let [[_ market quote tf'] (re-find #"^([a-z0-9_]+)_([a-z0-9]+)_([a-z0-9]+)_candles$" table-name)
         tf (keyword tf')]
     [market quote (- (c/intervals-map tf)) tf]))
 

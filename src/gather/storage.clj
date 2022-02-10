@@ -317,13 +317,15 @@
 
 (defn prepare
   [conn table assets]
-  (debug "Preparing insert statement for" table)
-  (->> assets construct-candle-rec first (ch/insert-query table) (ch/prepare conn)))
+  (let [cols (-> assets construct-candle-rec first)]
+    (debug "Preparing insert statement for" table "cols:" (count cols))
+    (->> cols (ch/insert-query table) (ch/prepare conn))))
 
 (defn insert-candle-rows!
   [p-st table assets rows]
   (trace "Inserting into" table (count rows) "row(s);"
          "interval" (c/format-interval :1m (ffirst rows) (first (last rows)))
+         "cols:" (-> rows first count)
          "assets:" (count assets) assets)
   (ch/insert-many! p-st rows))
 
@@ -337,7 +339,7 @@
           tf tfs]
     (let [table         (get-candle-table-name market-name quote tf)
           get-candles   (partial get-candles market market-fields tf quote)
-          grab-candles! (partial grab-candles! get-candles (vec (repeat (count market-fields) 0)))
+          grab-candles! (partial grab-candles! get-candles (-> market-fields count dec (repeat 0) vec))
           start         (atom (or
                                (get-next-candle conn table tf)
                                (if (not-empty @starts) (apply min (vals @starts)) nil)))
