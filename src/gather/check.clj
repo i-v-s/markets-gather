@@ -1,9 +1,8 @@
 (ns gather.check
-  (:require
-   [clojure.string :as str]
-   [gather.common :as c]
-   [gather.sql :as sql]
-   [gather.ch :as ch]))
+  (:require [clojure.string :as str]
+            [house.sql      :as sql]
+            [house.ch       :as ch]
+            [gather.common  :as c]))
 
 (defn parse-type
   [table-name]

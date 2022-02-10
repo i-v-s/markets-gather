@@ -1,7 +1,7 @@
 (ns gather.restore
   (:require [clojure.string :as str]
-            [gather.ch :as ch]
-            [gather.common :as c]))
+            [house.ch       :as ch]
+            [gather.common  :as c]))
 
 (def user-dir "/var/lib/clickhouse/user_files/")
 
@@ -13,16 +13,16 @@
   [db-url file-name & {:keys [temp-db] :or {temp-db "restore"}}]
   (ch/create-db! db-url)
   (let [dest-db (-> db-url ch/parse-url last)
-        st (ch/connect-st db-url)
-        dest-tables (-> st ch/fetch-tables set)]
+        conn (ch/connect db-url)
+        dest-tables (-> conn ch/fetch-tables set)]
     (try
-      (when (some (partial = temp-db) (fetch-dbs st))
+      (when (some (partial = temp-db) (fetch-dbs conn))
         (println "Warning: database" temp-db "exists. Drop? (y/n)")
         (if (= (read-line) "y")
-          (drop-db! st temp-db)
+          (drop-db! conn temp-db)
           (c/exit! 1)))
       (println (str "Create database '" temp-db "'"))
-      (ch/exec! st (str "CREATE DATABASE " temp-db " ENGINE = Ordinary"))
+      (ch/exec! conn (str "CREATE DATABASE " temp-db " ENGINE = Ordinary"))
       (println "Extracting data")
       (c/extract! file-name user-dir)
       (c/exec! "chown" "-R" "clickhouse:clickhouse" user-dir)
@@ -37,33 +37,33 @@
                                #"\s+storage_policy\s+=\s+'\w+'," ""))]]
         (println "Attaching table" table)
         (c/exec! "rm" file)
-        (ch/exec! st query))
+        (ch/exec! conn query))
       (println "Restore completed")
 
       (println (str "Merge DB '" temp-db "' to '" dest-db "'"))
-      (doseq [[table parts] (ch/fetch-partitions st :db temp-db)]
+      (doseq [[table parts] (ch/fetch-partitions conn :db temp-db)]
         (when-not (contains? dest-tables table)
           (println "Creating" (str dest-db "." table))
-          (ch/exec! st
+          (ch/exec! conn
                     (str/replace-first
-                     (->> table (str temp-db ".") (ch/show-table st))
+                     (->> table (str temp-db ".") (ch/show-table conn))
                      #"TABLE\s+\w+\."
                      (str "TABLE " dest-db "."))))
         (doseq [part parts]
           (println "Moving" table part)
           (try
-            (ch/exec! st (str
+            (ch/exec! conn (str
                           "ALTER TABLE " temp-db "." table
                           " MOVE PARTITION " part
                           " TO TABLE " dest-db "." table))
             (catch Exception e (println (.getMessage e))))
           (println (str "Try to optimize table " dest-db "." table) part)
-          (ch/exec! st (str
+          (ch/exec! conn (str
                         "OPTIMIZE TABLE " dest-db "." table
                         " PARTITION " part
                         " FINAL"))))
       (println (str "Remove database '" temp-db "'"))
-      (drop-db! st temp-db)
+      (drop-db! conn temp-db)
       (println "Completed")
       (catch Exception e
         (println "\nException:" (.getMessage e)))))

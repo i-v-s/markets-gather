@@ -1,11 +1,13 @@
 (ns gather.config
-  (:require [clojure.data.json :as json]
-            [clojure.tools.logging :refer [info warn]]
-            [clojure.walk :as w]
-            [gather.common :as c]
-            [gather.storage :as sg]
-            [gather.exmo :as exmo]
-            [gather.binance :as binance])
+  (:require [clojure.tools.logging :refer [info warn]]
+            [clojure.data.json :as json]
+            [clojure.walk      :as w]
+            [exch.utils        :as xu]
+            [exch.exmo         :as exmo]
+            [exch.binance      :as binance]
+            [gather.common     :as c]
+            [gather.storage    :as sg])
+
   (:import [gather.storage CandlesData]))
 
 (defn must
@@ -42,12 +44,12 @@
   [markets-config]
   (for [[market-key {raw-pairs :raw-pairs candles :candles cq :candle-quotes}] markets-config
         :let [market (case market-key
-                       :exmo (exmo/create)
-                       :binance (binance/create)
+                       :exmo         (exmo/create)
+                       :binance      (binance/create :spot)
+                       :binance-usdm (binance/create :usdm)
                        (warn "Unknown market:" (name market-key)))]
         :when (some? market)
-        :let [all-pairs (-> market sg/get-all-pairs set)
-              filtered-raw-pairs (filter-exists all-pairs (str "Unknown pairs for market " (:name market)) raw-pairs)
+        :let [all-pairs (-> market xu/get-all-pairs set)
               groupped-pairs (group-pairs all-pairs)
               filtered-candle-pairs (if cq (select-keys groupped-pairs cq) groupped-pairs)]]
     (do
@@ -57,7 +59,9 @@
              :candles (if (and candles (not-empty filtered-candle-pairs))
                         (CandlesData. filtered-candle-pairs (prepare-intervals market candles))
                         nil)
-             :raw (sg/make-raw-data (:name market) filtered-raw-pairs)))))
+             :raw (some->> raw-pairs
+                           (filter-exists all-pairs (str "Unknown pairs for market " (:name market)))
+                           (sg/make-raw-data (:name market)))))))
 
 (defn load-json
   "Reads and parse config.json data"

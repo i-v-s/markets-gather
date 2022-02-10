@@ -1,7 +1,7 @@
 (ns gather.backup
   (:require [clojure.string :as str]
-            [ch-tools.ch :as ch]
-            [gather.common :as c]
+            [house.ch       :as ch]
+            [gather.common  :as c]
             [clojure.java.shell :as sh]))
 
 (defn partition-test

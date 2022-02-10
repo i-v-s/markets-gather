@@ -1,7 +1,6 @@
 (ns gather.drop
-  (:require
-   [gather.common :as c]
-   [gather.ch :as ch]))
+  (:require [house.ch      :as ch]
+            [gather.common :as c]))
 
 (defn -main
   "Start with params"
@@ -10,8 +9,8 @@
     (println "No wildcards specified")
     (let [wcs (map c/make-wc args)
           checker (c/some-fn-map (partial partial re-find) wcs)
-          st (ch/connect-st db-url)
-          tabs (ch/fetch-tables st)
+          conn (ch/connect db-url)
+          tabs (ch/fetch-tables conn)
           f-tabs (filter checker tabs)]
       (println "Database URL is:" db-url)
       (println "Using expressions:" wcs)
@@ -24,4 +23,4 @@
           (when (= (read-line) "y")
             (doseq [tab f-tabs]
               (println "Dropping " tab)
-              (ch/exec! st (str "DROP TABLE " tab)))))))))
+              (ch/exec! conn (str "DROP TABLE " tab)))))))))
