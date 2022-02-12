@@ -1,6 +1,6 @@
 (ns gather.storage
   (:require
-   [clojure.tools.logging :refer [trace debug warn error]]
+   [clojure.tools.logging :refer [trace debug info warn error]]
    [clojure.string :as str]
    [exch.utils     :as xu]
    [house.ch       :as ch]
@@ -356,7 +356,8 @@
                         (c/now-ts)))]
           (->> (grab-candles! assets current :start @start :starts @starts :end end)
                (insert-candle-rows! @p-st table assets))
-          (reset! start (if end (c/inc-ts end tf) current)))))
+          (reset! start (if end (c/inc-ts end tf) current))))
+      (info "Completed candles:" market-name quote tf))
 
     (when (not= tf (last tfs))
       (reset! starts (into {} (get-candle-starts conn market quote tf))))))

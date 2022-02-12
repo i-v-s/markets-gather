@@ -18,11 +18,10 @@
   [markets {db-url :url}]
   (let [conn (ch/connect db-url)]
     (info "Started Core")
-    (loop []
+    (while true
       (Thread/sleep 2000)
       (sg/insert-from-raw-buffers! markets conn)
-      (sg/print-buffers markets)
-      (recur))))
+      (sg/print-buffers markets))))
 
 (defn candles-insert-loop!
   [market {db-url :url}]
@@ -46,10 +45,12 @@
             (xu/gather-ws-loop! market nil :info)) ; TODO!!!
          :title (str (:name market) " WS")))
       (a/thread
-        (try
-          (candles-insert-loop! market db-cfg)
-          (catch Exception e
-            (error e "Market" (:name market) "- exception in candles-insert-loop!")))))
+        (while true
+          (try
+            (candles-insert-loop! market db-cfg)
+            (catch Exception e
+              (error e "Market" (:name market) "- exception in candles-insert-loop!")))
+          (Thread/sleep (* 60 60 1000)))))
     (c/try-loop (partial raw-insert-loop! markets db-cfg) :title "Core" :delay 10000)))
 
 (defn -main
