@@ -4,7 +4,7 @@
             [clojure.walk      :as w]
             [exch.utils        :as xu]
             [exch.exmo         :as exmo]
-            [exch.binance      :as binance]
+            [exch.binance.core :as binance]
             [gather.common     :as c]
             [gather.storage    :as sg])
 

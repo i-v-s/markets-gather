@@ -3,7 +3,7 @@
             [clojure.core.async :as a]
             [clojure.java.io    :as io]
             [exch.utils         :as xu]
-            [exch.binance       :as binance]
+            [exch.binance.core  :as binance]
             [house.ch           :as ch]
             [gather.config      :as cfg]
             [gather.storage     :as sg]
