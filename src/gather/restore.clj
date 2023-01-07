@@ -22,7 +22,7 @@
           (drop-db! conn temp-db)
           (c/exit! 1)))
       (println (str "Create database '" temp-db "'"))
-      (ch/exec! conn (str "CREATE DATABASE " temp-db " ENGINE = Ordinary"))
+      (ch/exec! conn (str "CREATE DATABASE " temp-db))
       (println "Extracting data")
       (c/extract! file-name user-dir)
       (c/exec! "chown" "-R" "clickhouse:clickhouse" user-dir)
