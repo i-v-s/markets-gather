@@ -169,6 +169,12 @@
            (recur (dec ~left))))
        @~result)))
 
+(defmacro init-nil!
+  "Initialize atom if nil"
+  [atom value]
+  `(when (-> ~atom deref nil?)
+    (reset! ~atom ~value)))
+
 (defn forever-loop
   "Execute function in async thread loop"
   [func & args]

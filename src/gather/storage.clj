@@ -353,9 +353,11 @@
                         (c/inc-ts @start tf :mul (-> market :candles-limit dec))
                         (c/now-ts)))
               rows (grab-candles! assets current :start @start :starts @starts :end end)]
-          (when-not @p-st
-            (reset! p-st (prepare conn table assets)))
-          (insert-candle-rows! @p-st table assets rows)
+          (if (not-empty rows)
+            (do
+              (c/init-nil! p-st (prepare conn table assets))
+              (insert-candle-rows! @p-st table assets rows))
+            (warn "No rows to insert from" market-name quote tf (if @start (c/ts-str @start) "*")))
           (reset! start (if end (c/inc-ts end tf) current))))
       (info "Completed candles:" market-name quote tf))
 
